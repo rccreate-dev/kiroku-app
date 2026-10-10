@@ -10,6 +10,8 @@
  * ここに残るのは、申請者の「氏名・会社名・端末ID・状態」だけです。
  */
 
+// 申請の一覧を入れるスプレッドシートのID（URLの /d/ と /edit の間の文字列）
+var SPREADSHEET_ID = '1Aul83tA7Y5TkNBRWjEio-pnU3Lwx0I9zHEYcUYOT3w4';
 var SHEET_NAME = '利用者';
 var STATUS_PENDING = '申請中';
 var STATUS_OK = '承認';
@@ -43,7 +45,7 @@ function json_(obj) {
 }
 
 function sheet_() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sh = ss.getSheetByName(SHEET_NAME);
   if (!sh) {
     sh = ss.insertSheet(SHEET_NAME);
