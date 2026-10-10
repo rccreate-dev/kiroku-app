@@ -95,7 +95,7 @@ h2{font-size:18px;margin:4px 0 8px}
 const CONFIG = {
   APPROVAL_URL: 'https://script.google.com/macros/s/AKfycbyh77k-hWsUqDc3fJWPlr7BhG6hhX4ReNszEiQrD49UlXyvllTwSGaEcdcS59ofb-ME/exec',
   MAX_PAGES_PER_PDF: 10,   // 1回のPDFに入れられる用紙の枚数(スマホのメモリ対策。超えるときは分けて出力)
-  VERSION: '1.1.0'
+  VERSION: '1.2.0'
 };
 
 const KINDS = ['着手前', '施工中', '完了後'];
@@ -130,7 +130,8 @@ const pad2 = (n) => String(n).padStart(2, '0');
 function fmtDate(ts) { const d = new Date(ts); return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate(); }
 function fmtMD(ts) { const d = new Date(ts); return (d.getMonth() + 1) + '/' + d.getDate(); }
 function fmtTime(ts) { const d = new Date(ts); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
-function todayJP() { const d = new Date(); return (d.getMonth() + 1) + '月' + d.getDate() + '日'; }
+function todayJP() { const d = new Date(); return d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日'; }
+const fmtP = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(1)) + ' 人';  // 人数(0.5人単位)
 function ymd(d) { return d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()); }
 let toastTimer;
 function toast(msg) {
@@ -434,7 +435,7 @@ async function viewRecords(siteId) {
           h('div', null, h('b', null, fmtMD(r.createdAt)), h('span', { class: 'tag' }, '写真' + r.photos.length + '枚'),
             r.draft ? h('span', { class: 'tag warn' }, '入力途中') : null),
           h('div', null, r.location || '（変更箇所 未入力）'),
-          h('div', { class: 'mute' }, (r.content || '（変更内容 未入力）') + '／' + r.people + '名'))));
+          h('div', { class: 'mute' }, (r.content || '（変更内容 未入力）') + '／' + fmtP(r.people)))));
   });
 
   const rename = async () => {
@@ -507,15 +508,15 @@ async function viewEdit(siteId, recId) {
   if (recId && !rec) return goReplace('#site/' + siteId);
   const past = (await dbBySite(siteId)).map(normRec).filter((r) => !rec || r.id !== rec.id).sort((a, b) => b.createdAt - a.createdAt);
   const photos = rec ? rec.photos.map((p) => ({ ...p })) : [];
-  const st = { people: rec ? rec.people : 1 };
+  const st = { people: rec && typeof rec.people === 'number' ? rec.people : 1 };
   let urls = [];
 
   const locIn = h('input', { type: 'text', id: 'f-loc', maxlength: '40', placeholder: '例: 2階 C通り 北側壁', value: rec ? rec.location : '', autocomplete: 'off' });
   const conIn = h('textarea', { id: 'f-con', rows: '2', maxlength: '60', placeholder: '例: 開口部の追加（幅900 × 高さ2100）' });
   const worIn = h('textarea', { id: 'f-wor', rows: '2', maxlength: '60', placeholder: '例: 型枠の加工・組立、開口まわりの補強' });
   if (rec) { conIn.value = rec.content; worIn.value = rec.work; }
-  const num = h('div', { class: 'n' }, st.people + ' 名');
-  const setP = (d) => { st.people = Math.max(1, Math.min(99, st.people + d)); num.textContent = st.people + ' 名'; };
+  const num = h('div', { class: 'n' }, fmtP(st.people));
+  const setP = (d) => { st.people = Math.max(0, Math.min(99, st.people + d * 0.5)); num.textContent = fmtP(st.people); };
 
   // 入力途中でも消えないよう、写真を撮るたびに自動で保存する(final=false のときは「入力途中」として残る)
   const persist = async (final) => {
@@ -680,7 +681,11 @@ function headCell(g, x, y, w, hgt, label, lw, val) {
   g.beginPath(); g.moveTo(x + lw + .5, y); g.lineTo(x + lw + .5, y + hgt); g.stroke();
   g.fillStyle = '#111'; g.textAlign = 'center'; g.font = '700 13px ' + FONT;
   g.fillText(label, x + lw / 2, y + hgt / 2);
-  g.textAlign = 'left'; g.font = '400 15px ' + FONT;
+  g.textAlign = 'left';
+  // 長いときは文字を小さくして最後まで入れる(11pxでも入らなければ省略)
+  let size = 15;
+  for (; size > 11; size--) { g.font = '400 ' + size + 'px ' + FONT; if (g.measureText(val).width <= w - lw - 20) break; }
+  g.font = '400 ' + size + 'px ' + FONT;
   g.fillText(fitLine(g, val, w - lw - 20), x + lw + 10, y + hgt / 2);
 }
 // 1段 = 写真1枚。左に写真(下に No.・撮影日時・種類)、右にその工事の 変更箇所・変更内容・作業内容・人数
@@ -719,7 +724,7 @@ async function drawSlot(g, y, s, showBlank) {
   const hs = [60, 70, 70, 59];
   const labels = ['変更箇所', '変更内容', '作業内容', '人数'];
   const maxLines = [2, 2, 2, 1];
-  const texts = [rec.location, rec.content, rec.work, rec.people + ' 名'];
+  const texts = [rec.location, rec.content, rec.work, fmtP(rec.people)];
   g.strokeStyle = '#333'; g.lineWidth = 1; g.strokeRect(x + .5, top + .5, w - 1, 260);
   let ry = top + 1;
   for (let i = 0; i < 4; i++) {
@@ -752,10 +757,10 @@ async function renderPage(def, idx, total, meta) {
   g.fillStyle = '#111'; g.textAlign = 'left'; g.font = '700 20px ' + FONT;
   g.fillText('追加変更作業 記録用紙', 38, 50);
   g.fillStyle = '#222'; g.fillRect(38, 61, 718, 3);
-  headCell(g, 38, 70, 560, 40, '現場名', 64, meta.siteName);
-  headCell(g, 606, 70, 150, 40, '月日', 50, meta.date);
-  headCell(g, 38, 114, 560, 40, '会社名', 64, meta.company || '');
-  headCell(g, 606, 114, 150, 40, '作成者', 64, meta.author);
+  headCell(g, 38, 70, 490, 40, '現場名', 64, meta.siteName);
+  headCell(g, 536, 70, 220, 40, '年月日', 64, meta.date);
+  headCell(g, 38, 114, 420, 40, '会社名', 64, meta.company || '');
+  headCell(g, 466, 114, 290, 40, '作成者', 64, meta.author);
   for (let i = 0; i < 3; i++) {
     await drawSlot(g, SLOT_Y0 + i * SLOT_STEP, def.slots[i], i === def.slots.length);
   }

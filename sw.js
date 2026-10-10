@@ -2,7 +2,7 @@
 // 方針: アプリ本体は端末にキャッシュして、電波がなくても開けるようにする。
 // 更新があれば裏で取得し、次回起動時から新しい版になる。
 // 版を上げたときは CACHE の数字を変える。
-const CACHE = 'kiroku-v4';
+const CACHE = 'kiroku-v5';
 const ASSETS = [
   './',
   './index.html',
