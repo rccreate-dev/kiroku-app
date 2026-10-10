@@ -2,14 +2,15 @@
 // 方針: アプリ本体は端末にキャッシュして、電波がなくても開けるようにする。
 // 更新があれば裏で取得し、次回起動時から新しい版になる。
 // 版を上げたときは CACHE の数字を変える。
-const CACHE = 'kiroku-v5';
+const CACHE = 'kiroku-v6';
 const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/apple-touch-icon.png'
+  './icons/apple-touch-icon.png',
+  './icons/icon-512-maskable.png'
 ];
 
 self.addEventListener('install', (e) => {
