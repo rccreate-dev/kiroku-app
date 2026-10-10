@@ -1,0 +1,944 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>追加変更 記録</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#1b2a41">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="追加変更記録">
+<style>
+:root{
+  --ink:#111;--bg:#f4f4f2;--card:#fff;--line:#c9c9c4;--head:#1b2a41;
+  --pri:#c2410c;--mute:#55554f;--ok:#166534;--bad:#b91c1c;--soft:#ececec;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;
+  font-size:17px;line-height:1.5}
+.bar{position:sticky;top:0;z-index:5;background:var(--head);color:#fff;display:flex;align-items:center;gap:8px;
+  min-height:56px;padding:6px 12px;padding-top:max(6px,env(safe-area-inset-top))}
+.bar h1{font-size:18px;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .ico{min-height:44px;min-width:44px;padding:0 12px;border:1.5px solid rgba(255,255,255,.7);border-radius:10px;
+  background:transparent;color:#fff;font:inherit;font-size:15px;font-weight:700}
+main{padding:12px 12px 120px;max-width:640px;margin:0 auto}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:52px;padding:0 18px;border-radius:12px;
+  border:2px solid var(--ink);background:#fff;color:var(--ink);font:inherit;font-weight:700;width:100%;cursor:pointer}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+.btn.danger{border-color:var(--bad);color:var(--bad)}
+.btn.link{border:0;background:transparent;min-height:44px;font-weight:400;text-decoration:underline;color:var(--mute)}
+.btn:disabled{opacity:.45}
+.btn.sm{min-height:44px;font-size:15px}
+.row{display:flex;gap:10px}
+.row>*{flex:1}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin:0 0 10px}
+.mute{color:var(--mute);font-size:15px}
+input[type=text],textarea{width:100%;font:inherit;font-size:17px;padding:12px;border:2px solid var(--ink);border-radius:10px;background:#fff;color:var(--ink)}
+textarea{resize:none}
+label.lb{display:block;font-weight:700;margin:2px 0 6px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 0}
+.chips .cl{width:100%;font-size:14px;color:var(--mute);margin-top:2px}
+.chip{min-height:44px;padding:0 14px;border-radius:22px;border:1.5px solid var(--mute);background:#fff;color:var(--ink);font:inherit;font-size:15px}
+.seg{display:flex;gap:8px}
+.seg button{flex:1;min-height:52px;border-radius:12px;border:2px solid var(--ink);background:#fff;color:var(--ink);font:inherit;font-weight:700}
+.seg button[aria-pressed=true]{background:var(--ink);color:#fff}
+.step{display:flex;align-items:center;gap:12px}
+.step button{width:64px;height:56px;border-radius:12px;border:2px solid var(--ink);background:#fff;font-size:28px;font-weight:700;color:var(--ink)}
+.step .n{flex:1;text-align:center;font-size:28px;font-weight:700}
+.photo{width:100%;aspect-ratio:4/3;background:#e4e4e4;border:1px solid #999;border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--mute);overflow:hidden;margin-bottom:8px}
+.photo img{width:100%;height:100%;object-fit:contain}
+.ph{border:1px solid var(--line);border-radius:12px;padding:10px;margin:0 0 12px;background:#fafaf8}
+.site{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;text-align:left;padding:14px;margin:0 0 10px;background:#fff;
+  border:2px solid var(--ink);border-radius:14px;font:inherit;color:var(--ink);min-height:68px;cursor:pointer}
+.site b{font-size:18px}
+.rec{display:flex;gap:10px;align-items:stretch;background:#fff;border:1px solid var(--line);border-radius:14px;margin:0 0 10px;overflow:hidden}
+.rec .ck{width:56px;flex:none;display:flex;align-items:center;justify-content:center;border:0;border-right:1px solid var(--line);background:#fafaf8}
+.rec .ck input{width:28px;height:28px}
+.rec .body{flex:1;min-width:0;display:flex;gap:10px;padding:8px 8px 8px 0;border:0;background:transparent;text-align:left;font:inherit;color:var(--ink);cursor:pointer}
+.rec .th{width:84px;height:63px;flex:none;border-radius:8px;background:#e4e4e4;object-fit:cover}
+.rec .tx{min-width:0;flex:1}
+.rec .tx div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{display:inline-block;border:1px solid var(--ink);border-radius:6px;padding:0 6px;font-size:13px;font-weight:700;margin-left:6px}
+.tag.warn{border-color:var(--bad);color:var(--bad)}
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:6;background:#fff;border-top:1px solid var(--line);padding:10px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom))}
+.dock .in{max-width:640px;margin:0 auto;display:flex;gap:10px}
+.dock .btn.sm{flex:none;width:112px}
+.banner{background:#fff7ed;border:1.5px solid var(--pri);border-radius:12px;padding:10px 12px;margin:0 0 12px;font-size:15px}
+.banner .x{float:right;border:0;background:transparent;font-size:20px;min-width:44px;min-height:44px;margin:-8px -10px 0 0}
+.pages{display:flex;flex-direction:column;gap:14px;margin-top:10px}
+.pg canvas{width:100%;height:auto;border:1px solid var(--line);background:#fff;display:block}
+.pg .pgn{text-align:center;font-size:14px;color:var(--mute);margin-top:4px}
+#toast{position:fixed;left:12px;right:12px;bottom:92px;z-index:20;display:flex;justify-content:center;pointer-events:none}
+#toast div{background:#222;color:#fff;border-radius:10px;padding:12px 16px;font-size:16px;max-width:520px;opacity:0;transition:opacity .2s}
+#toast div.on{opacity:1}
+h2{font-size:18px;margin:4px 0 8px}
+.ok{color:var(--ok);font-weight:700}.bad{color:var(--bad);font-weight:700}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast"><div></div></div>
+<script>
+'use strict';
+
+/* ============================================================
+ * 設定
+ * APPROVAL_URL に承認用スクリプト(gas/Code.gs)のURLを入れると、
+ * 「申請 → 管理者が承認」しないと使えない運用になります。
+ * 空のままなら承認なしで動きます(試用・開発用)。
+ * ========================================================== */
+const CONFIG = {
+  APPROVAL_URL: '',
+  MAX_PAGES_PER_PDF: 10,   // 1回のPDFに入れられる用紙の枚数(スマホのメモリ対策。超えるときは分けて出力)
+  VERSION: '1.1.0'
+};
+
+const KINDS = ['着手前', '施工中', '完了後'];
+const PRESET_CONTENT = ['開口部の追加', '寸法の変更', '位置の変更', '段差の手直し', '型枠の追加', '一部撤去'];
+const PRESET_WORK = ['型枠の加工・組立', '型枠の組替え', '型枠の解体', '補強', '寸法の確認', '清掃'];
+
+/* ---------- 小さな道具 ---------- */
+const $ = (s) => document.querySelector(s);
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  if (attrs) {
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'class') el.className = v;
+      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+      else if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), v);
+      else if (k === 'value') el.value = v;
+      else if (k === 'checked' || k === 'disabled' || k === 'hidden') el[k] = v;
+      else el.setAttribute(k, v === true ? '' : v);
+    }
+  }
+  for (const kid of kids.flat()) {
+    if (kid == null || kid === false) continue;
+    el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+  return el;
+}
+function uid() {
+  return (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 12));
+}
+const pad2 = (n) => String(n).padStart(2, '0');
+function fmtDate(ts) { const d = new Date(ts); return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate(); }
+function fmtMD(ts) { const d = new Date(ts); return (d.getMonth() + 1) + '/' + d.getDate(); }
+function fmtTime(ts) { const d = new Date(ts); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+function todayJP() { const d = new Date(); return (d.getMonth() + 1) + '月' + d.getDate() + '日'; }
+function ymd(d) { return d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()); }
+let toastTimer;
+function toast(msg) {
+  const box = $('#toast div');
+  box.textContent = msg; box.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => box.classList.remove('on'), 2600);
+}
+let liveURLs = [];
+function objURL(blob) { const u = URL.createObjectURL(blob); liveURLs.push(u); return u; }
+function cleanupURLs() { liveURLs.forEach((u) => URL.revokeObjectURL(u)); liveURLs = []; }
+function mount(...nodes) { $('#app').replaceChildren(...nodes); window.scrollTo(0, 0); }
+function topBar(title, opt = {}) {
+  return h('header', { class: 'bar' },
+    opt.back ? h('button', { class: 'ico', 'aria-label': '戻る', onClick: opt.back }, '戻る') : null,
+    h('h1', null, title),
+    opt.right || null);
+}
+
+/* ---------- 端末内データベース(IndexedDB) ---------- */
+let dbp;
+function db() {
+  if (!dbp) {
+    dbp = new Promise((res, rej) => {
+      const r = indexedDB.open('kiroku', 1);
+      r.onupgradeneeded = () => {
+        const d = r.result;
+        d.createObjectStore('sites', { keyPath: 'id' });
+        const rs = d.createObjectStore('records', { keyPath: 'id' });
+        rs.createIndex('siteId', 'siteId');
+        d.createObjectStore('kv');
+      };
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  }
+  return dbp;
+}
+const rq = (r) => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+async function dbGet(s, k) { const d = await db(); return rq(d.transaction(s).objectStore(s).get(k)); }
+async function dbAll(s) { const d = await db(); return rq(d.transaction(s).objectStore(s).getAll()); }
+async function dbBySite(siteId) { const d = await db(); return rq(d.transaction('records').objectStore('records').index('siteId').getAll(siteId)); }
+async function dbPut(s, v, k) {
+  const d = await db();
+  return new Promise((res, rej) => {
+    const t = d.transaction(s, 'readwrite');
+    if (k === undefined) t.objectStore(s).put(v); else t.objectStore(s).put(v, k);
+    t.oncomplete = () => res(); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
+  });
+}
+async function dbDel(s, keys) {
+  const d = await db();
+  return new Promise((res, rej) => {
+    const t = d.transaction(s, 'readwrite');
+    for (const k of [].concat(keys)) t.objectStore(s).delete(k);
+    t.oncomplete = () => res(); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
+  });
+}
+const kvGet = (k) => dbGet('kv', k);
+const kvSet = (k, v) => dbPut('kv', v, k);
+const kvDel = (k) => dbDel('kv', k);
+
+/* 追加変更工事 1件 = { id, siteId, location, content, work, people, photos:[{id,blob,kind,shotAt,fileMtime,memo}], draft, createdAt, updatedAt } */
+function normRec(r) {
+  if (!r) return r;
+  if (!r.photos) {   // 旧形式(写真1枚=1件)で保存されたものを読み替える
+    r.photos = r.photo ? [{ id: uid(), blob: r.photo, kind: r.kind || '着手前', shotAt: r.shotAt, fileMtime: r.fileMtime || null, memo: '' }] : [];
+  }
+  r.createdAt = r.createdAt || (r.photos[0] && r.photos[0].shotAt) || Date.now();
+  r.updatedAt = r.updatedAt || r.createdAt;
+  return r;
+}
+const pagesOf = (r) => Math.max(1, Math.ceil(r.photos.length / 3));
+
+/* ---------- 画面の切り替え ---------- */
+const selBySite = {};   // 現場ごとの「PDFにする工事」の選択
+let routeSeq = 0;
+function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
+function goReplace(hash) { history.replaceState(null, '', hash); route(); }
+window.addEventListener('hashchange', route);
+
+async function route() {
+  const my = ++routeSeq;
+  cleanupURLs();
+  try {
+    const gate = await gateState();
+    if (my !== routeSeq) return;
+    if (gate !== 'ok') return gateView(gate);
+    const [name, a, b] = location.hash.replace(/^#/, '').split('/');
+    if (name === 'site' && a) return await viewRecords(a);
+    if (name === 'edit' && a) return await viewEdit(a, b && b !== 'new' ? b : null);
+    if (name === 'export' && a) return await viewExport(a);
+    if (name === 'settings') return await viewSettings();
+    return await viewSites();
+  } catch (e) {
+    console.error(e);
+    mount(topBar('エラー'), h('main', null,
+      h('div', { class: 'card' }, h('p', null, 'うまく動きませんでした。もう一度開き直してください。'),
+        h('p', { class: 'mute' }, String(e && e.message || e))),
+      h('button', { class: 'btn pri', onClick: () => location.reload() }, '開き直す')));
+  }
+}
+
+/* ============================================================
+ * 利用の承認
+ * ========================================================== */
+async function gateState() {
+  if (!CONFIG.APPROVAL_URL) return (await kvGet('author')) ? 'ok' : 'apply';
+  const ap = await kvGet('approval');
+  if (!ap) return 'apply';
+  if (ap.status === 'approved') return 'ok';
+  if (ap.status === 'rejected') return 'rejected';
+  return 'pending';
+}
+async function fetchJSON(url, ms = 15000) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try {
+    const r = await fetch(url, { signal: ctl.signal });
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+async function deviceId() {
+  let id = await kvGet('deviceId');
+  if (!id) { id = uid(); await kvSet('deviceId', id); }
+  return id;
+}
+async function checkStatus() {
+  const id = await deviceId();
+  const r = await fetchJSON(CONFIG.APPROVAL_URL + '?action=status&id=' + encodeURIComponent(id));
+  if (!r || !r.ok) throw new Error('status');
+  return r.status; // approved | pending | rejected | none
+}
+async function revalidate() {
+  if (!CONFIG.APPROVAL_URL) return;
+  const ap = await kvGet('approval');
+  if (!ap || ap.status !== 'approved') return;
+  try {
+    const st = await checkStatus();
+    if (st === 'rejected') { await kvSet('approval', { status: 'rejected', at: Date.now() }); route(); }
+  } catch (e) { /* 電波がないときは今のまま使える */ }
+}
+function gateView(state) {
+  if (state === 'apply') return viewApply();
+  if (state === 'rejected') {
+    return mount(topBar('利用できません'), h('main', null,
+      h('div', { class: 'card' }, h('p', null, '利用が承認されませんでした。管理者にお問い合わせください。')),
+      h('button', { class: 'btn', onClick: async () => { await kvDel('approval'); route(); } }, '申請をやり直す')));
+  }
+  return viewPending();
+}
+async function viewApply() {
+  const gateOn = !!CONFIG.APPROVAL_URL;
+  const name = h('input', { type: 'text', maxlength: '20', autocomplete: 'name', value: (await kvGet('author')) || '', id: 'ap-name' });
+  const comp = h('input', { type: 'text', maxlength: '40', autocomplete: 'organization', value: (await kvGet('company')) || '', id: 'ap-comp' });
+  const btn = h('button', { class: 'btn pri' }, gateOn ? '申請する' : '始める');
+  btn.addEventListener('click', async () => {
+    const n = name.value.trim(), c = comp.value.trim();
+    if (!n) return toast('お名前を入力してください');
+    if (gateOn && !c) return toast('会社名を入力してください');
+    btn.disabled = true;
+    try {
+      await kvSet('author', n); await kvSet('company', c);
+      if (gateOn) {
+        const id = await deviceId();
+        const r = await fetchJSON(CONFIG.APPROVAL_URL + '?action=apply&id=' + encodeURIComponent(id) +
+          '&name=' + encodeURIComponent(n) + '&company=' + encodeURIComponent(c));
+        if (!r || !r.ok) throw new Error('apply');
+        await kvSet('approval', { status: r.status === 'approved' ? 'approved' : r.status === 'rejected' ? 'rejected' : 'pending', at: Date.now() });
+      }
+      route();
+    } catch (e) {
+      btn.disabled = false;
+      toast('送信できませんでした。電波のある場所でもう一度お試しください');
+    }
+  });
+  mount(topBar(gateOn ? '利用申請' : 'はじめに'), h('main', null,
+    h('div', { class: 'card' },
+      h('p', null, gateOn ? '利用には管理者の承認が必要です。お名前と会社名を入力して申請してください。（承認のために管理者へ送られるのはこの2つだけです。写真や記録は送られません）' : 'お名前を入力してください。記録用紙の「作成者」に印字されます。'),
+      h('label', { class: 'lb', for: 'ap-name' }, 'お名前（作成者）'), name,
+      gateOn ? h('div', null, h('label', { class: 'lb', for: 'ap-comp', style: { marginTop: '14px' } }, '会社名'), comp) : null),
+    btn));
+}
+async function viewPending() {
+  const msg = h('p', null, '管理者が確認しています。承認されるとこのアプリが使えるようになります。');
+  const btn = h('button', { class: 'btn pri' }, '承認されたか確認する');
+  const check = async (quiet) => {
+    btn.disabled = true;
+    try {
+      const st = await checkStatus();
+      if (st === 'approved') { await kvSet('approval', { status: 'approved', at: Date.now() }); return route(); }
+      if (st === 'rejected') { await kvSet('approval', { status: 'rejected', at: Date.now() }); return route(); }
+      if (st === 'none') { await kvDel('approval'); return route(); }
+      if (!quiet) toast('まだ承認されていません');
+    } catch (e) { if (!quiet) toast('確認できませんでした。電波のある場所でお試しください'); }
+    btn.disabled = false;
+  };
+  btn.addEventListener('click', () => check(false));
+  mount(topBar('承認待ち'), h('main', null,
+    h('div', { class: 'card' }, h('h2', null, '申請を送りました'), msg,
+      h('p', { class: 'mute' }, '申請者: ' + ((await kvGet('author')) || ''))),
+    btn));
+  check(true);
+}
+
+/* ============================================================
+ * 現場の一覧
+ * ========================================================== */
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; });
+function isStandalone() { return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; }
+function installBanner() {
+  if (isStandalone()) return null;
+  try { if (sessionStorage.getItem('hideInstall')) return null; } catch (e) { /* 無視 */ }
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const box = h('div', { class: 'banner' },
+    h('button', { class: 'x', 'aria-label': '閉じる', onClick: () => { try { sessionStorage.setItem('hideInstall', '1'); } catch (e) { /* 無視 */ } box.remove(); } }, '×'),
+    h('b', null, 'ホーム画面に追加してお使いください'),
+    h('div', null, ios
+      ? 'Safariの共有ボタン（四角に上向き矢印）→「ホーム画面に追加」。追加しないと、記録が消えることがあります。'
+      : 'ブラウザのメニューから「ホーム画面に追加」または「アプリをインストール」を選んでください。'),
+    (!ios && deferredPrompt) ? h('div', { style: { marginTop: '8px' } },
+      h('button', { class: 'btn sm pri', onClick: async () => { deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; box.remove(); } }, 'ホーム画面に追加')) : null);
+  return box;
+}
+async function viewSites() {
+  const sites = await dbAll('sites');
+  const recs = (await dbAll('records')).map(normRec);
+  const cnt = {}, last = {};
+  recs.forEach((r) => { cnt[r.siteId] = (cnt[r.siteId] || 0) + 1; last[r.siteId] = Math.max(last[r.siteId] || 0, r.updatedAt); });
+  sites.sort((a, b) => (last[b.id] || b.createdAt) - (last[a.id] || a.createdAt));
+  const input = h('input', { type: 'text', id: 'newSite', placeholder: '例: 〇〇ビル新築工事', maxlength: '40', autocomplete: 'off' });
+  const add = async () => {
+    const name = input.value.trim();
+    if (!name) return toast('現場名を入力してください');
+    const s = { id: uid(), name, createdAt: Date.now() };
+    await dbPut('sites', s);
+    go('#site/' + s.id);
+  };
+  mount(
+    topBar('現場を選ぶ', { right: h('button', { class: 'ico', onClick: () => go('#settings') }, '設定') }),
+    h('main', null,
+      installBanner(),
+      sites.length
+        ? h('div', null, sites.map((s) => h('button', { class: 'site', onClick: () => go('#site/' + s.id) },
+            h('b', null, s.name),
+            h('span', { class: 'mute' }, '追加変更工事 ' + (cnt[s.id] || 0) + '件' + (last[s.id] ? '　最終 ' + fmtDate(last[s.id]) : '')))))
+        : h('p', { class: 'mute' }, 'まず現場名を入力して追加してください。'),
+      h('div', { class: 'card' },
+        h('label', { class: 'lb', for: 'newSite' }, '新しい現場を追加'), input,
+        h('div', { style: { height: '10px' } }),
+        h('button', { class: 'btn pri', onClick: add }, '現場を追加'))));
+}
+
+/* ============================================================
+ * 現場の中の「追加変更工事」一覧
+ * ========================================================== */
+async function viewRecords(siteId) {
+  const site = await dbGet('sites', siteId);
+  if (!site) return goReplace('#sites');
+  const recs = (await dbBySite(siteId)).map(normRec).sort((a, b) => b.createdAt - a.createdAt);
+  const byId = Object.fromEntries(recs.map((r) => [r.id, r]));
+  const sel = selBySite[siteId] || (selBySite[siteId] = new Set());
+  for (const id of [...sel]) if (!byId[id] || byId[id].draft) sel.delete(id);
+  const ready = recs.filter((r) => !r.draft);
+
+  const exportBtn = h('button', { class: 'btn pri' });
+  const allBtn = h('button', { class: 'btn sm' });
+  const refresh = () => {
+    const n = sel.size;
+    const pages = Math.ceil([...sel].reduce((a, id) => a + byId[id].photos.length, 0) / 3);
+    exportBtn.disabled = n === 0;
+    exportBtn.textContent = n ? 'PDF出力（' + n + '件 → ' + pages + '枚）' : 'PDF出力';
+    allBtn.disabled = ready.length === 0;
+    allBtn.textContent = (n === ready.length && n > 0) ? '全て解除' : '全て選択';
+  };
+  exportBtn.addEventListener('click', () => {
+    const pages = Math.ceil([...sel].reduce((a, id) => a + byId[id].photos.length, 0) / 3);
+    if (pages > CONFIG.MAX_PAGES_PER_PDF) return toast('一度に出力できるのは' + CONFIG.MAX_PAGES_PER_PDF + '枚までです。件数を減らして、分けて出力してください');
+    go('#export/' + siteId);
+  });
+  const boxes = [];
+  allBtn.addEventListener('click', () => {
+    const all = sel.size === ready.length;
+    sel.clear();
+    if (!all) ready.forEach((r) => sel.add(r.id));
+    boxes.forEach((b, i) => { b.checked = sel.has(recs[i].id); });
+    refresh();
+  });
+
+  const list = recs.map((r) => {
+    const cb = h('input', { type: 'checkbox', checked: sel.has(r.id), disabled: !!r.draft, 'aria-label': 'PDFにする' });
+    cb.addEventListener('change', () => { cb.checked ? sel.add(r.id) : sel.delete(r.id); refresh(); });
+    boxes.push(cb);
+    const first = r.photos[0];
+    return h('div', { class: 'rec' },
+      h('label', { class: 'ck' }, cb),
+      h('button', { class: 'body', onClick: () => go('#edit/' + siteId + '/' + r.id) },
+        first ? h('img', { class: 'th', src: objURL(first.blob), alt: '' }) : h('div', { class: 'th' }),
+        h('div', { class: 'tx' },
+          h('div', null, h('b', null, fmtMD(r.createdAt)), h('span', { class: 'tag' }, '写真' + r.photos.length + '枚'),
+            r.draft ? h('span', { class: 'tag warn' }, '入力途中') : null),
+          h('div', null, r.location || '（変更箇所 未入力）'),
+          h('div', { class: 'mute' }, (r.content || '（変更内容 未入力）') + '／' + r.people + '名'))));
+  });
+
+  const rename = async () => {
+    const n = prompt('現場名を変更', site.name);
+    if (n == null) return;
+    const t = n.trim();
+    if (!t) return toast('現場名が空です');
+    site.name = t; await dbPut('sites', site); route();
+  };
+  const remove = async () => {
+    if (!confirm('「' + site.name + '」と、その追加変更工事' + recs.length + '件を削除します。元に戻せません。よろしいですか？')) return;
+    await dbDel('records', recs.map((r) => r.id)); await dbDel('sites', site.id);
+    delete selBySite[siteId];
+    goReplace('#sites');
+  };
+
+  mount(
+    topBar(site.name, { back: () => go('#sites') }),
+    h('main', null,
+      h('button', { class: 'btn pri', style: { marginBottom: '12px' }, onClick: () => go('#edit/' + siteId + '/new') }, '＋ 追加変更工事を登録'),
+      recs.length
+        ? h('p', { class: 'mute', style: { margin: '0 0 8px' } }, 'PDFにしたい工事にチェックを入れてください。写真3枚ごとに用紙が1枚増えます。')
+        : h('p', { class: 'mute' }, 'まだ登録がありません。'),
+      list,
+      h('div', { class: 'row', style: { marginTop: '18px' } },
+        h('button', { class: 'btn link', onClick: rename }, '現場名を変更'),
+        h('button', { class: 'btn link', onClick: remove }, 'この現場を削除'))),
+    h('div', { class: 'dock' }, h('div', { class: 'in' }, allBtn, exportBtn)));
+  refresh();
+}
+
+/* ============================================================
+ * 追加変更工事の登録・編集(1件に写真を何枚でも)
+ * ========================================================== */
+function loadViaImg(blob) {
+  return new Promise((res, rej) => {
+    const u = URL.createObjectURL(blob);
+    const im = new Image();
+    im.onload = () => { URL.revokeObjectURL(u); res(im); };
+    im.onerror = () => { URL.revokeObjectURL(u); rej(new Error('image')); };
+    im.src = u;
+  });
+}
+async function loadBitmap(blob) {
+  try { return await createImageBitmap(blob); } catch (e) { return await loadViaImg(blob); }
+}
+async function processPhoto(file) {
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+  catch (e) { bmp = await loadViaImg(file); }
+  const w0 = bmp.width, h0 = bmp.height;
+  const sc = Math.min(1, 1280 / Math.max(w0, h0));
+  const w = Math.round(w0 * sc), hh = Math.round(h0 * sc);
+  const c = document.createElement('canvas'); c.width = w; c.height = hh;
+  c.getContext('2d').drawImage(bmp, 0, 0, w, hh);
+  if (bmp.close) bmp.close();
+  const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.8));
+  if (!blob) throw new Error('jpeg');
+  return blob;
+}
+function recent(recs, key) {
+  const out = [];
+  for (const r of recs) { const v = (r[key] || '').trim(); if (v && !out.includes(v)) out.push(v); if (out.length >= 4) break; }
+  return out;
+}
+async function viewEdit(siteId, recId) {
+  const site = await dbGet('sites', siteId);
+  if (!site) return goReplace('#sites');
+  let rec = recId ? normRec(await dbGet('records', recId)) : null;
+  if (recId && !rec) return goReplace('#site/' + siteId);
+  const past = (await dbBySite(siteId)).map(normRec).filter((r) => !rec || r.id !== rec.id).sort((a, b) => b.createdAt - a.createdAt);
+  const photos = rec ? rec.photos.map((p) => ({ ...p })) : [];
+  const st = { people: rec ? rec.people : 1 };
+  let urls = [];
+
+  const locIn = h('input', { type: 'text', id: 'f-loc', maxlength: '40', placeholder: '例: 2階 C通り 北側壁', value: rec ? rec.location : '', autocomplete: 'off' });
+  const conIn = h('textarea', { id: 'f-con', rows: '2', maxlength: '60', placeholder: '例: 開口部の追加（幅900 × 高さ2100）' });
+  const worIn = h('textarea', { id: 'f-wor', rows: '2', maxlength: '60', placeholder: '例: 型枠の加工・組立、開口まわりの補強' });
+  if (rec) { conIn.value = rec.content; worIn.value = rec.work; }
+  const num = h('div', { class: 'n' }, st.people + ' 名');
+  const setP = (d) => { st.people = Math.max(1, Math.min(99, st.people + d)); num.textContent = st.people + ' 名'; };
+
+  // 入力途中でも消えないよう、写真を撮るたびに自動で保存する(final=false のときは「入力途中」として残る)
+  const persist = async (final) => {
+    const now = Date.now();
+    const r = {
+      id: rec ? rec.id : uid(), siteId,
+      createdAt: rec ? rec.createdAt : now, updatedAt: now,
+      location: locIn.value.trim(), content: conIn.value.trim(), work: worIn.value.trim(), people: st.people,
+      photos: photos.map((p) => ({ id: p.id, blob: p.blob, kind: p.kind, shotAt: p.shotAt, fileMtime: p.fileMtime || null, memo: (p.memo || '').trim() })),
+      draft: final ? false : (rec ? !!rec.draft : true)
+    };
+    await dbPut('records', r);
+    rec = r;
+    history.replaceState(null, '', '#edit/' + siteId + '/' + r.id);
+    return r;
+  };
+
+  const photoList = h('div');
+  const countEl = h('b');
+  const fileIn = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true });
+  const shootBtn = h('button', { class: 'btn pri' });
+  const nextKind = () => {
+    if (!photos.length) return '着手前';
+    return photos[photos.length - 1].kind === '着手前' ? '施工中' : '完了後';
+  };
+  const renderPhotos = () => {
+    urls.forEach((u) => URL.revokeObjectURL(u)); urls = [];
+    countEl.textContent = '写真 ' + photos.length + '枚';
+    shootBtn.textContent = photos.length ? '＋ 写真を追加する' : '写真を撮る';
+    photoList.replaceChildren(...photos.map((p, i) => {
+      const u = URL.createObjectURL(p.blob); urls.push(u); liveURLs.push(u);
+      const kb = KINDS.map((k) => {
+        const b = h('button', { type: 'button', 'aria-pressed': String(p.kind === k) }, k);
+        b.addEventListener('click', () => { p.kind = k; kb.forEach((x, j) => x.setAttribute('aria-pressed', String(KINDS[j] === k))); });
+        return b;
+      });
+      return h('div', { class: 'ph' },
+        h('div', { class: 'photo' }, h('img', { src: u, alt: '写真' + (i + 1) })),
+        h('div', { class: 'mute', style: { margin: '0 0 8px' } }, '撮影日時: ' + fmtDate(p.shotAt) + ' ' + fmtTime(p.shotAt) + '（自動で記録）'),
+        h('div', { class: 'seg' }, kb),
+        h('div', { style: { height: '8px' } }),
+        h('button', { type: 'button', class: 'btn sm danger', onClick: () => {
+          if (!confirm('この写真を削除しますか？（「保存する」を押すと確定します）')) return;
+          photos.splice(photos.indexOf(p), 1); renderPhotos();
+        } }, 'この写真を削除'));
+    }));
+  };
+  shootBtn.addEventListener('click', () => fileIn.click());
+  fileIn.addEventListener('change', async () => {
+    const f = fileIn.files && fileIn.files[0];
+    if (!f) return;
+    shootBtn.disabled = true; shootBtn.textContent = '処理中…';
+    let added = null;
+    try {
+      const blob = await processPhoto(f);
+      added = { id: uid(), blob, kind: nextKind(), shotAt: Date.now(), fileMtime: f.lastModified || null, memo: '' };  // 撮影日はアプリが自動で記録(手入力はできない)
+      photos.push(added);
+      await persist(false);
+    } catch (e) {
+      if (added) photos.splice(photos.indexOf(added), 1);
+      toast('写真を保存できませんでした。端末の空き容量を確認して、もう一度撮影してください');
+    }
+    fileIn.value = ''; shootBtn.disabled = false; renderPhotos();
+  });
+
+  const chipRow = (label, items, onPick) => items.length
+    ? h('div', { class: 'chips' }, h('div', { class: 'cl' }, label), items.map((t) => h('button', { type: 'button', class: 'chip', onClick: () => onPick(t) }, t)))
+    : null;
+  const replace = (el) => (t) => { el.value = t; };
+  const append = (el) => (t) => { if (!el.value.includes(t)) el.value = el.value ? el.value + '、' + t : t; };
+
+  const saveBtn = h('button', { class: 'btn pri' }, '保存する');
+  saveBtn.addEventListener('click', async () => {
+    if (!photos.length) return toast('写真を1枚以上撮影してください');
+    if (!locIn.value.trim()) return toast('変更箇所を入力してください');
+    if (!conIn.value.trim()) return toast('変更内容を入力してください');
+    if (!worIn.value.trim()) return toast('作業内容を入力してください');
+    saveBtn.disabled = true;
+    try { await persist(true); }
+    catch (e) { saveBtn.disabled = false; return toast('保存できませんでした。端末の空き容量を確認してください'); }
+    toast('保存しました');
+    goReplace('#site/' + siteId);
+  });
+  const delBtn = rec ? h('button', { class: 'btn danger', onClick: async () => {
+    if (!confirm('この追加変更工事（写真' + photos.length + '枚）を削除します。元に戻せません。よろしいですか？')) return;
+    await dbDel('records', rec.id);
+    if (selBySite[siteId]) selBySite[siteId].delete(rec.id);
+    goReplace('#site/' + siteId);
+  } }, 'この追加変更工事を削除') : null;
+
+  mount(
+    topBar(rec ? '追加変更工事を直す' : '追加変更工事を登録', { back: () => history.length > 1 ? history.back() : go('#site/' + siteId) }),
+    h('main', null,
+      h('div', { class: 'card' },
+        h('p', { class: 'mute', style: { margin: '0 0 6px' } }, site.name),
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' } }, h('label', { class: 'lb', style: { margin: 0 } }, '写真'), countEl),
+        h('p', { class: 'mute', style: { margin: '0 0 10px' } }, '基本は「着手前・施工中・完了後」の3枚です。必要なら何枚でも追加できます（3枚ごとに用紙が1枚増えます）。'),
+        photoList, shootBtn, fileIn),
+      h('div', { class: 'card' }, h('label', { class: 'lb', for: 'f-loc' }, '変更箇所'), locIn,
+        chipRow('前回の入力', recent(past, 'location'), replace(locIn))),
+      h('div', { class: 'card' }, h('label', { class: 'lb', for: 'f-con' }, '変更内容'), conIn,
+        chipRow('前回の入力', recent(past, 'content'), replace(conIn)),
+        chipRow('追加する', PRESET_CONTENT, append(conIn))),
+      h('div', { class: 'card' }, h('label', { class: 'lb', for: 'f-wor' }, '作業内容'), worIn,
+        chipRow('前回の入力', recent(past, 'work'), replace(worIn)),
+        chipRow('追加する', PRESET_WORK, append(worIn))),
+      h('div', { class: 'card' }, h('label', { class: 'lb' }, '人数'),
+        h('div', { class: 'step' },
+          h('button', { type: 'button', 'aria-label': '減らす', onClick: () => setP(-1) }, '－'), num,
+          h('button', { type: 'button', 'aria-label': '増やす', onClick: () => setP(1) }, '＋'))),
+      saveBtn,
+      delBtn ? h('div', { style: { height: '48px' } }) : null, delBtn));
+  renderPhotos();
+}
+
+/* ============================================================
+ * A4記録用紙の描画 と PDF 作成
+ * 1ページ = 写真3枚。写真1枚ごとに、右にその工事の 変更箇所・変更内容・作業内容・人数 を印字する。
+ * 文字も含めて画像として用紙に描き、1ページ=1枚のJPEGとしてPDFに入れる。
+ * (日本語フォントをアプリに同梱しなくてよく、端末のフォントで確実に表示できる)
+ * ========================================================== */
+const FONT = '"Hiragino Sans","Noto Sans JP","Noto Sans CJK JP","Yu Gothic","Meiryo",sans-serif';
+const PAGE_W = 794, PAGE_H = 1123, SCALE = 1240 / 794;
+
+function fitLine(g, text, maxW) {
+  let t = String(text || '');
+  if (g.measureText(t).width <= maxW) return t;
+  while (t.length > 1 && g.measureText(t + '…').width > maxW) t = t.slice(0, -1);
+  return t + '…';
+}
+function wrapText(g, text, maxW, maxLines) {
+  const lines = [];
+  for (const para of String(text || '').split(/\r?\n/)) {
+    let cur = '';
+    for (const ch of Array.from(para)) {
+      if (cur && g.measureText(cur + ch).width > maxW) { lines.push(cur); cur = ch; } else cur += ch;
+    }
+    lines.push(cur);
+  }
+  if (lines.length > maxLines) {
+    lines.length = maxLines;
+    let l = lines[maxLines - 1];
+    while (l.length && g.measureText(l + '…').width > maxW) l = l.slice(0, -1);
+    lines[maxLines - 1] = l + '…';
+  }
+  return lines;
+}
+// 欄に収まらない長さのときは、文字を少しずつ小さくして最後まで印字する(12pxで足りなければ省略)
+function fitText(g, text, maxW, maxLines) {
+  let res;
+  for (const size of [15, 14, 13, 12]) {
+    g.font = '400 ' + size + 'px ' + FONT;
+    res = { size, lines: wrapText(g, text, maxW, 999) };
+    if (res.lines.length <= maxLines) return res;
+  }
+  res.lines = wrapText(g, text, maxW, maxLines);
+  return res;
+}
+function headCell(g, x, y, w, hgt, label, lw, val) {
+  g.fillStyle = '#ececec'; g.fillRect(x, y, lw, hgt);
+  g.strokeStyle = '#333'; g.lineWidth = 1; g.strokeRect(x + .5, y + .5, w - 1, hgt - 1);
+  g.beginPath(); g.moveTo(x + lw + .5, y); g.lineTo(x + lw + .5, y + hgt); g.stroke();
+  g.fillStyle = '#111'; g.textAlign = 'center'; g.font = '700 13px ' + FONT;
+  g.fillText(label, x + lw / 2, y + hgt / 2);
+  g.textAlign = 'left'; g.font = '400 15px ' + FONT;
+  g.fillText(fitLine(g, val, w - lw - 20), x + lw + 10, y + hgt / 2);
+}
+// 1段 = 写真1枚。左に写真(下に No.・撮影日時・種類)、右にその工事の 変更箇所・変更内容・作業内容・人数
+const SLOT_Y0 = 124, SLOT_STEP = 290, SLOT_H = 280;
+async function drawSlot(g, y, s, showBlank) {
+  g.strokeStyle = '#333'; g.lineWidth = 1; g.strokeRect(38.5, y + .5, 717, SLOT_H - 1);
+  if (!s) {
+    if (showBlank) { g.fillStyle = '#666'; g.textAlign = 'center'; g.font = '400 16px ' + FONT; g.fillText('以下余白', 38 + 359, y + SLOT_H / 2); }
+    return;
+  }
+  const p = s.photo, rec = s.rec;
+  const px = 47, py = y + 9, pw = 300, ph = 225;
+  g.fillStyle = '#e4e4e4'; g.fillRect(px, py, pw, ph);
+  const bmp = await loadBitmap(p.blob);
+  const k = Math.min(pw / bmp.width, ph / bmp.height);
+  const dw = bmp.width * k, dh = bmp.height * k;
+  g.drawImage(bmp, px + (pw - dw) / 2, py + (ph - dh) / 2, dw, dh);
+  if (bmp.close) bmp.close();
+  g.strokeStyle = '#999'; g.strokeRect(px + .5, py + .5, pw - 1, ph - 1);
+  // 写真の下: No. 撮影日時 / 種類
+  const cy = py + ph + 22;
+  g.fillStyle = '#111'; g.textAlign = 'left'; g.font = '700 12px ' + FONT;
+  g.fillText('No.' + s.label + '  ' + fmtDate(p.shotAt) + ' ' + fmtTime(p.shotAt), px, cy);
+  g.font = '700 11px ' + FONT;
+  let tx = px + pw;
+  for (let i = KINDS.length - 1; i >= 0; i--) {
+    const t = KINDS[i], w = g.measureText(t).width + 12, on = t === p.kind;
+    tx -= w;
+    if (on) { g.fillStyle = '#222'; g.fillRect(tx, cy - 10, w, 20); }
+    g.strokeStyle = '#333'; g.strokeRect(tx + .5, cy - 9.5, w - 1, 19);
+    g.fillStyle = on ? '#fff' : '#111'; g.textAlign = 'center'; g.fillText(t, tx + w / 2, cy);
+    tx -= 4;
+  }
+  // 右: 工事の内容
+  const x = px + pw + 12, w = 747 - x, lw = 66, top = py;
+  const hs = [60, 70, 70, 59];
+  const labels = ['変更箇所', '変更内容', '作業内容', '人数'];
+  const maxLines = [2, 2, 2, 1];
+  const texts = [rec.location, rec.content, rec.work, rec.people + ' 名'];
+  g.strokeStyle = '#333'; g.lineWidth = 1; g.strokeRect(x + .5, top + .5, w - 1, 260);
+  let ry = top + 1;
+  for (let i = 0; i < 4; i++) {
+    g.fillStyle = '#ececec'; g.fillRect(x + 1, ry, lw, hs[i]);
+    g.strokeStyle = '#333';
+    g.beginPath(); g.moveTo(x + 1 + lw + .5, ry); g.lineTo(x + 1 + lw + .5, ry + hs[i]); g.stroke();
+    if (i < 3) { g.beginPath(); g.moveTo(x + 1, ry + hs[i] - .5); g.lineTo(x + w - 1, ry + hs[i] - .5); g.stroke(); }
+    g.fillStyle = '#111'; g.textAlign = 'center'; g.font = '700 12px ' + FONT;
+    g.fillText(labels[i], x + 1 + lw / 2, ry + hs[i] / 2);
+    g.textAlign = 'left';
+    if (i === 3) {
+      g.font = '700 20px ' + FONT; g.fillText(texts[i], x + 1 + lw + 10, ry + hs[i] / 2);
+    } else {
+      const fit = fitText(g, texts[i], w - 2 - lw - 20, maxLines[i]);
+      g.font = '400 ' + fit.size + 'px ' + FONT;
+      const lh = Math.round(fit.size * 1.45), t0 = ry + (hs[i] - fit.lines.length * lh) / 2;
+      fit.lines.forEach((ln, j) => g.fillText(ln, x + 1 + lw + 10, t0 + lh * (j + .5)));
+    }
+    ry += hs[i];
+  }
+}
+// def = { slots(このページの写真, 最大3) }
+async function renderPage(def, idx, total, meta) {
+  const c = document.createElement('canvas');
+  c.width = 1240; c.height = Math.round(PAGE_H * SCALE);
+  const g = c.getContext('2d');
+  g.scale(SCALE, SCALE);
+  g.fillStyle = '#fff'; g.fillRect(0, 0, PAGE_W, PAGE_H);
+  g.textBaseline = 'middle';
+  g.fillStyle = '#111'; g.textAlign = 'left'; g.font = '700 20px ' + FONT;
+  g.fillText('追加変更作業 記録用紙', 38, 50);
+  g.fillStyle = '#222'; g.fillRect(38, 61, 718, 3);
+  headCell(g, 38, 70, 362, 40, '現場名', 64, meta.siteName);
+  headCell(g, 408, 70, 190, 40, '作成者', 64, meta.author);
+  headCell(g, 606, 70, 150, 40, '月日', 50, meta.date);
+  for (let i = 0; i < 3; i++) {
+    await drawSlot(g, SLOT_Y0 + i * SLOT_STEP, def.slots[i], i === def.slots.length);
+  }
+  g.fillStyle = '#555'; g.font = '400 12px ' + FONT;
+  g.textAlign = 'left'; g.fillText('※ 日付は、写真を撮影したときにアプリが自動で記録した日付です', 38, 1066);
+  g.textAlign = 'right'; g.fillText('頁 ' + (idx + 1) + ' / ' + total, 756, 1066);
+  return c;
+}
+// 選んだ工事の写真を、工事順(着手前→施工中→完了後)に1枚ずつ並べ、3枚ごとに用紙を分ける
+function buildPageDefs(recs) {
+  const slots = [];
+  recs.forEach((r, k) => {
+    const ph = r.photos.slice().sort((a, b) => (KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind)) || (a.shotAt - b.shotAt));
+    ph.forEach((p, j) => slots.push({ rec: r, photo: p, label: (k + 1) + (ph.length > 1 ? '-' + (j + 1) : '') }));
+  });
+  const defs = [];
+  for (let i = 0; i < slots.length; i += 3) defs.push({ slots: slots.slice(i, i + 3) });
+  return defs;
+}
+async function renderAll(defs, meta) {
+  const pages = [];
+  for (let i = 0; i < defs.length; i++) pages.push(await renderPage(defs[i], i, defs.length, meta));
+  return pages;
+}
+// 画像(JPEG)をA4の1ページとして並べただけのシンプルなPDFを作る
+function makePdf(jpegs) {
+  const enc = new TextEncoder();
+  const chunks = []; let len = 0; const off = [];
+  const push = (x) => { const b = typeof x === 'string' ? enc.encode(x) : x; chunks.push(b); len += b.length; };
+  const PW = 595.28, PH = 841.89;
+  const n = jpegs.length;
+  push('%PDF-1.4\n');
+  const obj = (id, body) => { off[id] = len; push(id + ' 0 obj\n'); push(body); push('\nendobj\n'); };
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  const kids = jpegs.map((_, i) => (3 + 3 * i) + ' 0 R').join(' ');
+  obj(2, '<< /Type /Pages /Kids [' + kids + '] /Count ' + n + ' >>');
+  jpegs.forEach((j, i) => {
+    const pid = 3 + 3 * i, cid = 4 + 3 * i, iid = 5 + 3 * i;
+    obj(pid, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + PW + ' ' + PH + '] /Resources << /XObject << /Im0 ' + iid + ' 0 R >> >> /Contents ' + cid + ' 0 R >>');
+    const cs = 'q ' + PW + ' 0 0 ' + PH + ' 0 0 cm /Im0 Do Q';
+    obj(cid, '<< /Length ' + cs.length + ' >>\nstream\n' + cs + '\nendstream');
+    off[iid] = len;
+    push(iid + ' 0 obj\n<< /Type /XObject /Subtype /Image /Width ' + j.w + ' /Height ' + j.h +
+      ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + j.data.length + ' >>\nstream\n');
+    push(j.data);
+    push('\nendstream\nendobj\n');
+  });
+  const count = 3 + 3 * n;
+  const xref = len;
+  let x = 'xref\n0 ' + count + '\n0000000000 65535 f \n';
+  for (let i = 1; i < count; i++) x += String(off[i]).padStart(10, '0') + ' 00000 n \n';
+  push(x);
+  push('trailer\n<< /Size ' + count + ' /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
+  return chunks;
+}
+async function canvasesToPdfFile(canvases, fileName) {
+  const jpegs = [];
+  for (const c of canvases) {
+    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.88));
+    jpegs.push({ data: new Uint8Array(await blob.arrayBuffer()), w: c.width, h: c.height });
+  }
+  return new File(makePdf(jpegs), fileName, { type: 'application/pdf' });
+}
+function safeName(s) { return String(s).replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 40) || '現場'; }
+
+async function viewExport(siteId) {
+  const site = await dbGet('sites', siteId);
+  const ids = [...(selBySite[siteId] || [])];
+  if (!site || !ids.length) return goReplace('#site/' + siteId);
+  const recs = (await Promise.all(ids.map((i) => dbGet('records', i)))).filter(Boolean).map(normRec)
+    .filter((r) => !r.draft && r.photos.length).sort((a, b) => a.createdAt - b.createdAt);
+  const defs = buildPageDefs(recs);
+  if (!defs.length) return goReplace('#site/' + siteId);
+  if (defs.length > CONFIG.MAX_PAGES_PER_PDF) {
+    toast('一度に出力できるのは' + CONFIG.MAX_PAGES_PER_PDF + '枚までです。件数を減らして、分けて出力してください');
+    return goReplace('#site/' + siteId);
+  }
+  const authorIn = h('input', { type: 'text', id: 'ex-author', maxlength: '20', value: (await kvGet('author')) || '' });
+  const pagesBox = h('div', { class: 'pages' });
+  const saveBtn = h('button', { class: 'btn pri', disabled: true }, 'PDFを保存・共有する');
+  let canvases = [];
+  let pdfFile = null;       // 押したらすぐ共有できるよう、PDFは先に作っておく(iOSは操作から時間が空くと共有が拒否されるため)
+  let builtAuthor = null;
+  let building = false;
+  const build = async () => {
+    if (building) return;
+    building = true; saveBtn.disabled = true; dlBtn.disabled = true; pdfFile = null;
+    pagesBox.replaceChildren(h('p', { class: 'mute' }, '用紙を作成しています…'));
+    try {
+      const author = authorIn.value.trim();
+      canvases = await renderAll(defs, { siteName: site.name, author, date: todayJP() });
+      pagesBox.replaceChildren(...canvases.map((c, i) => h('div', { class: 'pg' }, c, h('div', { class: 'pgn' }, (i + 1) + ' / ' + canvases.length + ' 枚目'))));
+      pdfFile = await canvasesToPdfFile(canvases, safeName(site.name) + '_' + ymd(new Date()) + '.pdf');
+      builtAuthor = author;
+      saveBtn.disabled = false; dlBtn.disabled = false;
+    } catch (e) {
+      console.error(e);
+      pagesBox.replaceChildren(h('p', { class: 'bad' }, '用紙を作れませんでした。もう一度お試しください'));
+    }
+    building = false;
+  };
+  authorIn.addEventListener('change', async () => { await kvSet('author', authorIn.value.trim()); build(); });
+  const ready = async () => {
+    if (!authorIn.value.trim()) { toast('作成者を入力してください'); return null; }
+    if (authorIn.value.trim() !== builtAuthor || !pdfFile) {
+      await build(); toast('作成者を反映しました。もう一度押してください'); return null;
+    }
+    return pdfFile;
+  };
+  const download = (file) => {
+    const u = URL.createObjectURL(file);
+    const a = h('a', { href: u, download: file.name }); document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 30000);
+    toast('PDFを保存しました');
+  };
+  saveBtn.addEventListener('click', async () => {
+    const file = await ready();
+    if (!file) return;
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: file.name }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; /* 共有できないときは保存に切り替える */ }
+    }
+    download(file);
+  });
+  const dlBtn = h('button', { class: 'btn', disabled: true, style: { marginTop: '14px' }, onClick: async () => { const f = await ready(); if (f) download(f); } },
+    '共有できないときは、ここから保存');
+  mount(
+    topBar('PDF出力', { back: () => history.back() }),
+    h('main', null,
+      h('div', { class: 'card' },
+        h('p', { style: { margin: '0 0 8px' } }, h('b', null, site.name), '　' + recs.length + '件 → ' + defs.length + '枚'),
+        h('p', { class: 'mute', style: { margin: '0 0 10px' } }, '月日には、今日（出力した日）が入ります。写真は着手前 → 施工中 → 完了後の順に並びます。'),
+        h('label', { class: 'lb', for: 'ex-author' }, '作成者'), authorIn),
+      pagesBox, dlBtn),
+    h('div', { class: 'dock' }, h('div', { class: 'in' }, saveBtn)));
+  await build();
+}
+
+/* ============================================================
+ * 設定
+ * ========================================================== */
+async function viewSettings() {
+  const name = h('input', { type: 'text', id: 's-name', maxlength: '20', value: (await kvGet('author')) || '' });
+  const comp = h('input', { type: 'text', id: 's-comp', maxlength: '40', value: (await kvGet('company')) || '' });
+  const ap = await kvGet('approval');
+  const stText = !CONFIG.APPROVAL_URL ? '承認なし（試用）' : ap && ap.status === 'approved' ? '承認済み' : ap && ap.status === 'rejected' ? '承認されていません' : '承認待ち';
+  const store = h('p', { class: 'mute' }, '');
+  if (navigator.storage && navigator.storage.estimate) {
+    navigator.storage.estimate().then((e) => {
+      const used = Math.round((e.usage || 0) / 1048576), quota = Math.round((e.quota || 0) / 1048576);
+      store.textContent = '端末内の使用量: 約' + used + 'MB' + (quota ? '（上限の目安 約' + quota + 'MB）' : '');
+    }).catch(() => {});
+  }
+  mount(
+    topBar('設定', { back: () => go('#sites') }),
+    h('main', null,
+      h('div', { class: 'card' },
+        h('label', { class: 'lb', for: 's-name' }, 'お名前（作成者）'), name,
+        h('div', { style: { height: '12px' } }),
+        h('label', { class: 'lb', for: 's-comp' }, '会社名'), comp,
+        h('div', { style: { height: '12px' } }),
+        h('button', { class: 'btn pri', onClick: async () => {
+          if (!name.value.trim()) return toast('お名前を入力してください');
+          await kvSet('author', name.value.trim()); await kvSet('company', comp.value.trim()); toast('保存しました');
+        } }, '保存する')),
+      h('div', { class: 'card' },
+        h('h2', null, '使い方'),
+        h('p', { style: { margin: '0 0 6px' } }, '1. 現場を選ぶ（なければ追加。何件でも登録できます）'),
+        h('p', { style: { margin: '0 0 6px' } }, '2. 追加変更工事が起きるたびに「追加変更工事を登録」。写真（着手前・施工中・完了後など）と、変更箇所・変更内容・作業内容・人数を入れます'),
+        h('p', { style: { margin: '0 0 6px' } }, '3. 提出するときに、工事を選んで「PDF出力」（全選択もできます。写真3枚ごとに用紙が1枚増えます）'),
+        h('p', { class: 'mute' }, '登録した内容とPDFはこのスマホの中に保存されます。スマホを替えるときや、アプリ・ブラウザのデータを消す前に、PDFを保存しておいてください。')),
+      h('div', { class: 'card' },
+        h('p', { style: { margin: '0 0 4px' } }, '利用状況: ', h('b', null, stText)),
+        store,
+        h('p', { class: 'mute', style: { margin: 0 } }, 'バージョン ' + CONFIG.VERSION))));
+}
+
+/* ---------- 起動 ---------- */
+(async () => {
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* 無視 */ }
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('./sw.js').catch(() => {});
+  await route();
+  revalidate();
+})();
+</script>
+</body>
+</html>
