@@ -684,7 +684,7 @@ function headCell(g, x, y, w, hgt, label, lw, val) {
   g.fillText(fitLine(g, val, w - lw - 20), x + lw + 10, y + hgt / 2);
 }
 // 1段 = 写真1枚。左に写真(下に No.・撮影日時・種類)、右にその工事の 変更箇所・変更内容・作業内容・人数
-const SLOT_Y0 = 124, SLOT_STEP = 290, SLOT_H = 280;
+const SLOT_Y0 = 168, SLOT_STEP = 290, SLOT_H = 280;
 async function drawSlot(g, y, s, showBlank) {
   g.strokeStyle = '#333'; g.lineWidth = 1; g.strokeRect(38.5, y + .5, 717, SLOT_H - 1);
   if (!s) {
@@ -752,9 +752,10 @@ async function renderPage(def, idx, total, meta) {
   g.fillStyle = '#111'; g.textAlign = 'left'; g.font = '700 20px ' + FONT;
   g.fillText('追加変更作業 記録用紙', 38, 50);
   g.fillStyle = '#222'; g.fillRect(38, 61, 718, 3);
-  headCell(g, 38, 70, 362, 40, '現場名', 64, meta.siteName);
-  headCell(g, 408, 70, 190, 40, '作成者', 64, meta.author);
+  headCell(g, 38, 70, 560, 40, '現場名', 64, meta.siteName);
   headCell(g, 606, 70, 150, 40, '月日', 50, meta.date);
+  headCell(g, 38, 114, 560, 40, '会社名', 64, meta.company || '');
+  headCell(g, 606, 114, 150, 40, '作成者', 64, meta.author);
   for (let i = 0; i < 3; i++) {
     await drawSlot(g, SLOT_Y0 + i * SLOT_STEP, def.slots[i], i === def.slots.length);
   }
@@ -833,22 +834,23 @@ async function viewExport(siteId) {
     return goReplace('#site/' + siteId);
   }
   const authorIn = h('input', { type: 'text', id: 'ex-author', maxlength: '20', value: (await kvGet('author')) || '' });
+  const companyIn = h('input', { type: 'text', id: 'ex-company', maxlength: '40', value: (await kvGet('company')) || '', autocomplete: 'organization' });
   const pagesBox = h('div', { class: 'pages' });
   const saveBtn = h('button', { class: 'btn pri', disabled: true }, 'PDFを保存・共有する');
   let canvases = [];
   let pdfFile = null;       // 押したらすぐ共有できるよう、PDFは先に作っておく(iOSは操作から時間が空くと共有が拒否されるため)
-  let builtAuthor = null;
+  let builtKey = null;
   let building = false;
   const build = async () => {
     if (building) return;
     building = true; saveBtn.disabled = true; dlBtn.disabled = true; pdfFile = null;
     pagesBox.replaceChildren(h('p', { class: 'mute' }, '用紙を作成しています…'));
     try {
-      const author = authorIn.value.trim();
-      canvases = await renderAll(defs, { siteName: site.name, author, date: todayJP() });
+      const author = authorIn.value.trim(), company = companyIn.value.trim();
+      canvases = await renderAll(defs, { siteName: site.name, author, company, date: todayJP() });
       pagesBox.replaceChildren(...canvases.map((c, i) => h('div', { class: 'pg' }, c, h('div', { class: 'pgn' }, (i + 1) + ' / ' + canvases.length + ' 枚目'))));
       pdfFile = await canvasesToPdfFile(canvases, safeName(site.name) + '_' + ymd(new Date()) + '.pdf');
-      builtAuthor = author;
+      builtKey = author + '|' + company;
       saveBtn.disabled = false; dlBtn.disabled = false;
     } catch (e) {
       console.error(e);
@@ -857,10 +859,11 @@ async function viewExport(siteId) {
     building = false;
   };
   authorIn.addEventListener('change', async () => { await kvSet('author', authorIn.value.trim()); build(); });
+  companyIn.addEventListener('change', async () => { await kvSet('company', companyIn.value.trim()); build(); });
   const ready = async () => {
     if (!authorIn.value.trim()) { toast('作成者を入力してください'); return null; }
-    if (authorIn.value.trim() !== builtAuthor || !pdfFile) {
-      await build(); toast('作成者を反映しました。もう一度押してください'); return null;
+    if (authorIn.value.trim() + '|' + companyIn.value.trim() !== builtKey || !pdfFile) {
+      await build(); toast('入力を反映しました。もう一度押してください'); return null;
     }
     return pdfFile;
   };
@@ -887,6 +890,8 @@ async function viewExport(siteId) {
       h('div', { class: 'card' },
         h('p', { style: { margin: '0 0 8px' } }, h('b', null, site.name), '　' + recs.length + '件 → ' + defs.length + '枚'),
         h('p', { class: 'mute', style: { margin: '0 0 10px' } }, '月日には、今日（出力した日）が入ります。写真は着手前 → 施工中 → 完了後の順に並びます。'),
+        h('label', { class: 'lb', for: 'ex-company' }, '会社名'), companyIn,
+        h('div', { style: { height: '10px' } }),
         h('label', { class: 'lb', for: 'ex-author' }, '作成者'), authorIn),
       pagesBox, dlBtn),
     h('div', { class: 'dock' }, h('div', { class: 'in' }, saveBtn)));
