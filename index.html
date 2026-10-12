@@ -38,7 +38,7 @@ main{padding:12px 12px 120px;max-width:640px;margin:0 auto}
 .row>*{flex:1}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin:0 0 10px}
 .mute{color:var(--mute);font-size:15px}
-input[type=text],textarea{width:100%;font:inherit;font-size:17px;padding:12px;border:2px solid var(--ink);border-radius:10px;background:#fff;color:var(--ink)}
+input[type=text],textarea,select{width:100%;font:inherit;font-size:17px;padding:12px;border:2px solid var(--ink);border-radius:10px;background:#fff;color:var(--ink)}
 textarea{resize:none}
 label.lb{display:block;font-weight:700;margin:2px 0 6px}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 0}
@@ -95,7 +95,7 @@ h2{font-size:18px;margin:4px 0 8px}
 const CONFIG = {
   APPROVAL_URL: 'https://script.google.com/macros/s/AKfycbyh77k-hWsUqDc3fJWPlr7BhG6hhX4ReNszEiQrD49UlXyvllTwSGaEcdcS59ofb-ME/exec',
   MAX_PAGES_PER_PDF: 10,   // 1回のPDFに入れられる用紙の枚数(スマホのメモリ対策。超えるときは分けて出力)
-  VERSION: '1.2.0'
+  VERSION: '1.3.0'
 };
 
 const KINDS = ['着手前', '施工中', '完了後'];
@@ -225,6 +225,7 @@ async function route() {
     if (name === 'edit' && a) return await viewEdit(a, b && b !== 'new' ? b : null);
     if (name === 'export' && a) return await viewExport(a);
     if (name === 'settings') return await viewSettings();
+    if (name === 'feedback') return await viewFeedback();
     return await viewSites();
   } catch (e) {
     console.error(e);
@@ -383,7 +384,8 @@ async function viewSites() {
       h('div', { class: 'card' },
         h('label', { class: 'lb', for: 'newSite' }, '新しい現場を追加'), input,
         h('div', { style: { height: '10px' } }),
-        h('button', { class: 'btn pri', onClick: add }, '現場を追加'))));
+        h('button', { class: 'btn pri', onClick: add }, '現場を追加')),
+      h('button', { class: 'btn', style: { marginTop: '4px' }, onClick: () => go('#feedback') }, 'ご意見・ご要望を送る')));
 }
 
 /* ============================================================
@@ -939,7 +941,49 @@ async function viewSettings() {
       h('div', { class: 'card' },
         h('p', { style: { margin: '0 0 4px' } }, '利用状況: ', h('b', null, stText)),
         store,
+        h('button', { class: 'btn', style: { margin: '6px 0 10px' }, onClick: () => go('#feedback') }, 'ご意見・ご要望を送る'),
         h('p', { class: 'mute', style: { margin: 0 } }, 'バージョン ' + CONFIG.VERSION))));
+}
+
+/* ============================================================
+ * ご意見・ご要望
+ * ========================================================== */
+async function viewFeedback() {
+  const cat = h('select', { id: 'fb-cat' },
+    ['使いやすさ', '不具合', 'ほしい機能', 'その他'].map((t) => h('option', { value: t }, t)));
+  const text = h('textarea', { id: 'fb-text', rows: '6', maxlength: '250', placeholder: '例: 写真を撮るボタンが小さい／用紙のこの部分が見づらい', style: { width: '100%', boxSizing: 'border-box' } });
+  const count = h('p', { class: 'mute', style: { textAlign: 'right', margin: '4px 0 0' } }, '0 / 250');
+  text.addEventListener('input', () => { count.textContent = text.value.length + ' / 250'; });
+  const btn = h('button', { class: 'btn pri' }, '送信する');
+  btn.addEventListener('click', async () => {
+    const t = text.value.trim();
+    if (!t) return toast('ご意見を入力してください');
+    btn.disabled = true; btn.textContent = '送信中…';
+    try {
+      if (!CONFIG.APPROVAL_URL) throw new Error('no_url');
+      const url = CONFIG.APPROVAL_URL + '?action=feedback&id=' + encodeURIComponent(await deviceId()) +
+        '&name=' + encodeURIComponent((await kvGet('author')) || '') +
+        '&company=' + encodeURIComponent((await kvGet('company')) || '') +
+        '&cat=' + encodeURIComponent(cat.value) + '&v=' + encodeURIComponent(CONFIG.VERSION) +
+        '&text=' + encodeURIComponent(t);
+      const r = await fetchJSON(url, 20000);
+      if (!r || !r.ok) throw new Error('fail');
+      toast('送信しました。ありがとうございます');
+      go('#sites');
+    } catch (e) {
+      btn.disabled = false; btn.textContent = '送信する';
+      toast('送信できませんでした。電波のよい場所でもう一度お試しください');
+    }
+  });
+  mount(
+    topBar('ご意見・ご要望', { back: () => go('#sites') }),
+    h('main', null,
+      h('div', { class: 'card' },
+        h('p', { style: { margin: '0 0 10px' } }, '使いにくい点、困ったこと、あったらよい機能などをお知らせください。お名前と会社名もあわせて送られます。'),
+        h('label', { class: 'lb', for: 'fb-cat' }, '内容の種類'), cat,
+        h('div', { style: { height: '12px' } }),
+        h('label', { class: 'lb', for: 'fb-text' }, 'ご意見（250文字まで）'), text, count),
+      btn));
 }
 
 /* ---------- 起動 ---------- */

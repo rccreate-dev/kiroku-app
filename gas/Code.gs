@@ -13,6 +13,7 @@
 // 申請の一覧を入れるスプレッドシートのID（URLの /d/ と /edit の間の文字列）
 var SPREADSHEET_ID = '1Aul83tA7Y5TkNBRWjEio-pnU3Lwx0I9zHEYcUYOT3w4';
 var SHEET_NAME = '利用者';
+var FEEDBACK_SHEET = '意見';
 var STATUS_PENDING = '申請中';
 var STATUS_OK = '承認';
 var STATUS_NG = '却下';
@@ -34,6 +35,7 @@ function doGet(e) {
     if (p.action === 'status') return json_(status_(p));
     if (p.action === 'decide') return decide_(p);
     if (p.action === 'commit') return commit_(p);
+    if (p.action === 'feedback') return json_(feedback_(p));
     return json_({ ok: false, error: 'bad_action' });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -56,6 +58,31 @@ function sheet_() {
     );
   }
   return sh;
+}
+
+// アプリの「ご意見・ご要望」。承認済みの端末だけ受け付け、「意見」シートに1行追加する
+function feedback_(p) {
+  if (!validId_(p.id)) return { ok: false, error: 'bad_id' };
+  var text = clean_(p.text, 250);
+  if (!text) return { ok: false, error: 'no_text' };
+  var sh0 = sheet_();
+  var row = findRow_(sh0, p.id);
+  if (!row || toCode_(sh0.getRange(row, 5).getValue()) !== 'approved') return { ok: false, error: 'not_approved' };
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sh = ss.getSheetByName(FEEDBACK_SHEET);
+    if (!sh) {
+      sh = ss.insertSheet(FEEDBACK_SHEET);
+      sh.appendRow(['受付日時', '種類', 'ご意見', '氏名', '会社名', 'バージョン', '端末ID']);
+      sh.setFrozenRows(1);
+    }
+    sh.appendRow([new Date(), clean_(p.cat, 20), text, clean_(p.name, 40), clean_(p.company, 60), clean_(p.v, 20), p.id]);
+  } finally {
+    lock.releaseLock();
+  }
+  return { ok: true };
 }
 
 function findRow_(sh, id) {
