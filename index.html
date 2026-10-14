@@ -95,7 +95,7 @@ h2{font-size:18px;margin:4px 0 8px}
 const CONFIG = {
   APPROVAL_URL: 'https://script.google.com/macros/s/AKfycbyh77k-hWsUqDc3fJWPlr7BhG6hhX4ReNszEiQrD49UlXyvllTwSGaEcdcS59ofb-ME/exec',
   MAX_PAGES_PER_PDF: 10,   // 1回のPDFに入れられる用紙の枚数(スマホのメモリ対策。超えるときは分けて出力)
-  VERSION: '1.3.0'
+  VERSION: '1.4.0'
 };
 
 const KINDS = ['着手前', '施工中', '完了後'];
@@ -484,6 +484,44 @@ function loadViaImg(blob) {
 async function loadBitmap(blob) {
   try { return await createImageBitmap(blob); } catch (e) { return await loadViaImg(blob); }
 }
+// 写真ファイルに記録された撮影日時(EXIF)を読む。無い・読めないときは null
+async function readExifDate(file) {
+  try {
+    const buf = await file.slice(0, 262144).arrayBuffer();
+    const v = new DataView(buf);
+    if (v.getUint16(0) !== 0xFFD8) return null;
+    let o = 2;
+    while (o + 4 < v.byteLength) {
+      const mk = v.getUint16(o), len = v.getUint16(o + 2);
+      if (mk === 0xFFE1 && v.getUint32(o + 4) === 0x45786966) {
+        const t = o + 10, le = v.getUint16(t) === 0x4949;
+        const u16 = (x) => v.getUint16(x, le), u32 = (x) => v.getUint32(x, le);
+        const ifd = (off, want) => {
+          const n = u16(t + off);
+          for (let k = 0; k < n; k++) {
+            const e = t + off + 2 + k * 12;
+            if (u16(e) === want) return { type: u16(e + 2), count: u32(e + 4), val: e + 8 };
+          }
+          return null;
+        };
+        const ex = ifd(u32(t + 4), 0x8769);
+        if (!ex) return null;
+        const dt = ifd(u32(ex.val), 0x9003) || ifd(u32(ex.val), 0x9004);
+        if (!dt || dt.count < 19) return null;
+        const so = t + u32(dt.val);
+        let str = '';
+        for (let k = 0; k < 19; k++) str += String.fromCharCode(v.getUint8(so + k));
+        const m = str.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+        if (!m) return null;
+        const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+        return isNaN(d) || d.getFullYear() < 2000 ? null : d.getTime();
+      }
+      if ((mk & 0xFF00) !== 0xFF00) return null;
+      o += 2 + len;
+    }
+  } catch (e) { /* 読めなければ null */ }
+  return null;
+}
 async function processPhoto(file) {
   let bmp;
   try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
@@ -527,7 +565,7 @@ async function viewEdit(siteId, recId) {
       id: rec ? rec.id : uid(), siteId,
       createdAt: rec ? rec.createdAt : now, updatedAt: now,
       location: locIn.value.trim(), content: conIn.value.trim(), work: worIn.value.trim(), people: st.people,
-      photos: photos.map((p) => ({ id: p.id, blob: p.blob, kind: p.kind, shotAt: p.shotAt, fileMtime: p.fileMtime || null, memo: (p.memo || '').trim() })),
+      photos: photos.map((p) => ({ id: p.id, blob: p.blob, kind: p.kind, shotAt: p.shotAt, fileMtime: p.fileMtime || null, src: p.src || null, memo: (p.memo || '').trim() })),
       draft: final ? false : (rec ? !!rec.draft : true)
     };
     await dbPut('records', r);
@@ -539,7 +577,9 @@ async function viewEdit(siteId, recId) {
   const photoList = h('div');
   const countEl = h('b');
   const fileIn = h('input', { type: 'file', accept: 'image/*', capture: 'environment', hidden: true });
+  const libIn = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true });
   const shootBtn = h('button', { class: 'btn pri' });
+  const libBtn = h('button', { class: 'btn', style: { marginTop: '8px' } }, '写真ライブラリから選ぶ');
   const nextKind = () => {
     if (!photos.length) return '着手前';
     return photos[photos.length - 1].kind === '着手前' ? '施工中' : '完了後';
@@ -547,7 +587,7 @@ async function viewEdit(siteId, recId) {
   const renderPhotos = () => {
     urls.forEach((u) => URL.revokeObjectURL(u)); urls = [];
     countEl.textContent = '写真 ' + photos.length + '枚';
-    shootBtn.textContent = photos.length ? '＋ 写真を追加する' : '写真を撮る';
+    shootBtn.textContent = photos.length ? '＋ 写真を撮って追加する' : '写真を撮る';
     photoList.replaceChildren(...photos.map((p, i) => {
       const u = URL.createObjectURL(p.blob); urls.push(u); liveURLs.push(u);
       const kb = KINDS.map((k) => {
@@ -557,7 +597,7 @@ async function viewEdit(siteId, recId) {
       });
       return h('div', { class: 'ph' },
         h('div', { class: 'photo' }, h('img', { src: u, alt: '写真' + (i + 1) })),
-        h('div', { class: 'mute', style: { margin: '0 0 8px' } }, '撮影日時: ' + fmtDate(p.shotAt) + ' ' + fmtTime(p.shotAt) + '（自動で記録）'),
+        h('div', { class: 'mute', style: { margin: '0 0 8px' } }, '撮影日時: ' + fmtDate(p.shotAt) + ' ' + fmtTime(p.shotAt) + (p.src === 'library' ? '（ライブラリの写真。写真ファイルに記録された日時）' : '（自動で記録）')),
         h('div', { class: 'seg' }, kb),
         h('div', { style: { height: '8px' } }),
         h('button', { type: 'button', class: 'btn sm danger', onClick: () => {
@@ -567,6 +607,7 @@ async function viewEdit(siteId, recId) {
     }));
   };
   shootBtn.addEventListener('click', () => fileIn.click());
+  libBtn.addEventListener('click', () => libIn.click());
   fileIn.addEventListener('change', async () => {
     const f = fileIn.files && fileIn.files[0];
     if (!f) return;
@@ -583,6 +624,32 @@ async function viewEdit(siteId, recId) {
     }
     fileIn.value = ''; shootBtn.disabled = false; renderPhotos();
   });
+  // ライブラリから選ぶ(複数枚可)。日付は写真ファイルのEXIF撮影日時、無ければファイルの更新日時、それも無ければ今
+  libIn.addEventListener('change', async () => {
+    const files = [...(libIn.files || [])].filter((f) => /^image\//.test(f.type) || /\.(jpe?g|png|heic|heif|webp)$/i.test(f.name));
+    if (!files.length) { libIn.value = ''; return; }
+    files.sort((a, b) => (a.lastModified || 0) - (b.lastModified || 0));
+    libBtn.disabled = shootBtn.disabled = true;
+    let ok = 0, ng = 0;
+    for (let i = 0; i < files.length; i++) {
+      libBtn.textContent = '処理中… ' + (i + 1) + ' / ' + files.length;
+      let added = null;
+      try {
+        const f = files[i];
+        const taken = await readExifDate(f);
+        const blob = await processPhoto(f);
+        added = { id: uid(), blob, kind: nextKind(), shotAt: taken || f.lastModified || Date.now(), fileMtime: f.lastModified || null, src: 'library', memo: '' };
+        photos.push(added);
+        await persist(false);
+        ok++;
+      } catch (e) {
+        if (added) photos.splice(photos.indexOf(added), 1);
+        ng++;
+      }
+    }
+    libIn.value = ''; libBtn.disabled = shootBtn.disabled = false; libBtn.textContent = '写真ライブラリから選ぶ'; renderPhotos();
+    toast(ng ? ok + '枚を追加しました。' + ng + '枚は読み込めませんでした（形式か空き容量をご確認ください）' : ok + '枚を追加しました。「着手前・施工中・完了後」を確認してください');
+  });
 
   const chipRow = (label, items, onPick) => items.length
     ? h('div', { class: 'chips' }, h('div', { class: 'cl' }, label), items.map((t) => h('button', { type: 'button', class: 'chip', onClick: () => onPick(t) }, t)))
@@ -592,7 +659,7 @@ async function viewEdit(siteId, recId) {
 
   const saveBtn = h('button', { class: 'btn pri' }, '保存する');
   saveBtn.addEventListener('click', async () => {
-    if (!photos.length) return toast('写真を1枚以上撮影してください');
+    if (!photos.length) return toast('写真を1枚以上登録してください');
     if (!locIn.value.trim()) return toast('変更箇所を入力してください');
     if (!conIn.value.trim()) return toast('変更内容を入力してください');
     if (!worIn.value.trim()) return toast('作業内容を入力してください');
@@ -616,7 +683,7 @@ async function viewEdit(siteId, recId) {
         h('p', { class: 'mute', style: { margin: '0 0 6px' } }, site.name),
         h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' } }, h('label', { class: 'lb', style: { margin: 0 } }, '写真'), countEl),
         h('p', { class: 'mute', style: { margin: '0 0 10px' } }, '基本は「着手前・施工中・完了後」の3枚です。必要なら何枚でも追加できます（3枚ごとに用紙が1枚増えます）。'),
-        photoList, shootBtn, fileIn),
+        photoList, shootBtn, fileIn, libBtn, libIn),
       h('div', { class: 'card' }, h('label', { class: 'lb', for: 'f-loc' }, '変更箇所'), locIn,
         chipRow('前回の入力', recent(past, 'location'), replace(locIn))),
       h('div', { class: 'card' }, h('label', { class: 'lb', for: 'f-con' }, '変更内容'), conIn,
@@ -710,7 +777,7 @@ async function drawSlot(g, y, s, showBlank) {
   // 写真の下: No. 撮影日時 / 種類
   const cy = py + ph + 22;
   g.fillStyle = '#111'; g.textAlign = 'left'; g.font = '700 12px ' + FONT;
-  g.fillText('No.' + s.label + '  ' + fmtDate(p.shotAt) + ' ' + fmtTime(p.shotAt), px, cy);
+  g.fillText('No.' + s.label + '  ' + fmtDate(p.shotAt) + ' ' + fmtTime(p.shotAt) + (p.src === 'library' ? ' ※' : ''), px, cy);
   g.font = '700 11px ' + FONT;
   let tx = px + pw;
   for (let i = KINDS.length - 1; i >= 0; i--) {
@@ -767,7 +834,10 @@ async function renderPage(def, idx, total, meta) {
     await drawSlot(g, SLOT_Y0 + i * SLOT_STEP, def.slots[i], i === def.slots.length);
   }
   g.fillStyle = '#555'; g.font = '400 12px ' + FONT;
-  g.textAlign = 'left'; g.fillText('※ 日付は、写真を撮影したときにアプリが自動で記録した日付です', 38, 1066);
+  const hasLib = def.slots.some((s) => s.photo.src === 'library');
+  g.textAlign = 'left'; g.fillText(hasLib
+    ? '日付は撮影時にアプリが記録した日付。※印はライブラリの写真で、写真ファイルに記録された日付'
+    : '※ 日付は、写真を撮影したときにアプリが自動で記録した日付です', 38, 1066);
   g.textAlign = 'right'; g.fillText('頁 ' + (idx + 1) + ' / ' + total, 756, 1066);
   return c;
 }
