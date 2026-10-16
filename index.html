@@ -95,7 +95,7 @@ h2{font-size:18px;margin:4px 0 8px}
 const CONFIG = {
   APPROVAL_URL: 'https://script.google.com/macros/s/AKfycbyh77k-hWsUqDc3fJWPlr7BhG6hhX4ReNszEiQrD49UlXyvllTwSGaEcdcS59ofb-ME/exec',
   MAX_PAGES_PER_PDF: 10,   // 1回のPDFに入れられる用紙の枚数(スマホのメモリ対策。超えるときは分けて出力)
-  VERSION: '1.4.0'
+  VERSION: '1.5.0'
 };
 
 const KINDS = ['着手前', '施工中', '完了後'];
@@ -226,6 +226,7 @@ async function route() {
     if (name === 'export' && a) return await viewExport(a);
     if (name === 'settings') return await viewSettings();
     if (name === 'feedback') return await viewFeedback();
+    if (name === 'backup') return await viewBackup();
     return await viewSites();
   } catch (e) {
     console.error(e);
@@ -372,10 +373,12 @@ async function viewSites() {
     await dbPut('sites', s);
     go('#site/' + s.id);
   };
+  const backupTip = await backupBanner();
   mount(
     topBar('現場を選ぶ', { right: h('button', { class: 'ico', onClick: () => go('#settings') }, '設定') }),
     h('main', null,
       installBanner(),
+      backupTip,
       sites.length
         ? h('div', null, sites.map((s) => h('button', { class: 'site', onClick: () => go('#site/' + s.id) },
             h('b', null, s.name),
@@ -982,6 +985,7 @@ async function viewSettings() {
   const name = h('input', { type: 'text', id: 's-name', maxlength: '20', value: (await kvGet('author')) || '' });
   const comp = h('input', { type: 'text', id: 's-comp', maxlength: '40', value: (await kvGet('company')) || '' });
   const ap = await kvGet('approval');
+  const lastBackup = await kvGet('lastBackup');
   const stText = !CONFIG.APPROVAL_URL ? '承認なし（試用）' : ap && ap.status === 'approved' ? '承認済み' : ap && ap.status === 'rejected' ? '承認されていません' : '承認待ち';
   const store = h('p', { class: 'mute' }, '');
   if (navigator.storage && navigator.storage.estimate) {
@@ -1007,12 +1011,303 @@ async function viewSettings() {
         h('p', { style: { margin: '0 0 6px' } }, '1. 現場を選ぶ（なければ追加。何件でも登録できます）'),
         h('p', { style: { margin: '0 0 6px' } }, '2. 追加変更工事が起きるたびに「追加変更工事を登録」。写真（着手前・施工中・完了後など）と、変更箇所・変更内容・作業内容・人数を入れます'),
         h('p', { style: { margin: '0 0 6px' } }, '3. 提出するときに、工事を選んで「PDF出力」（全選択もできます。写真3枚ごとに用紙が1枚増えます）'),
-        h('p', { class: 'mute' }, '登録した内容とPDFはこのスマホの中に保存されます。スマホを替えるときや、アプリ・ブラウザのデータを消す前に、PDFを保存しておいてください。')),
+        h('p', { class: 'mute' }, '登録した内容とPDFはこのスマホの中に保存されます。スマホを替えるときや、アプリ・ブラウザのデータを消す前に、バックアップを作って保存しておいてください。')),
+      h('div', { class: 'card' },
+        h('h2', null, 'バックアップ'),
+        h('p', { class: 'mute', style: { margin: '0 0 8px' } }, '最後のバックアップ: ' + (lastBackup ? fmtDate(lastBackup.at) : 'まだありません')),
+        h('button', { class: 'btn', onClick: () => go('#backup') }, 'バックアップ・復元')),
       h('div', { class: 'card' },
         h('p', { style: { margin: '0 0 4px' } }, '利用状況: ', h('b', null, stText)),
         store,
         h('button', { class: 'btn', style: { margin: '6px 0 10px' }, onClick: () => go('#feedback') }, 'ご意見・ご要望を送る'),
         h('p', { class: 'mute', style: { margin: 0 } }, 'バージョン ' + CONFIG.VERSION))));
+}
+
+/* ============================================================
+ * バックアップ・復元
+ * 記録と写真を ZIP ファイル1つに書き出し、利用者が自分で保存する。サーバーには送らない。
+ * ZIP の中身: data.json(記録) と 写真/現場名/*.jpg。圧縮はしない(写真はもともと JPEG のため)。
+ * 承認の状態と端末IDは入れない(別のスマホで戻したときは、そのスマホで申請し直す)。
+ * ========================================================== */
+const BACKUP_APP = 'kiroku-backup';
+const BACKUP_FORMAT = 1;
+const BACKUP_REMIND_DAYS = 14;    // 前回から何日たったら勧めるか
+const BACKUP_REMIND_COUNT = 10;   // 前回から何件の工事が増えた・直したら勧めるか
+
+let crcTable;
+function crc32(buf, crc = 0) {
+  if (!crcTable) {
+    crcTable = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; crcTable[n] = c >>> 0; }
+  }
+  crc = ~crc;
+  for (let i = 0; i < buf.length; i++) crc = crcTable[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
+  return ~crc >>> 0;
+}
+function dosTime(ts) {
+  const d = new Date(ts);
+  return { time: (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1),
+    date: ((Math.max(1980, d.getFullYear()) - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate() };
+}
+// entries: [{ name, data: Uint8Array | Blob, mtime }] → ZIP の Blob(無圧縮、ファイル名は UTF-8)
+async function makeZip(entries, onProgress) {
+  const enc = new TextEncoder();
+  const parts = [], central = [];
+  let offset = 0;
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    const bytes = e.data instanceof Blob ? new Uint8Array(await e.data.arrayBuffer()) : e.data;
+    const name = enc.encode(e.name);
+    const crc = crc32(bytes), t = dosTime(e.mtime || Date.now());
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
+    lh.setUint16(10, t.time, true); lh.setUint16(12, t.date, true); lh.setUint32(14, crc, true);
+    lh.setUint32(18, bytes.length, true); lh.setUint32(22, bytes.length, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    parts.push(lh.buffer, name, e.data instanceof Blob ? e.data : bytes);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+    ch.setUint16(12, t.time, true); ch.setUint16(14, t.date, true); ch.setUint32(16, crc, true);
+    ch.setUint32(20, bytes.length, true); ch.setUint32(24, bytes.length, true); ch.setUint16(28, name.length, true);
+    ch.setUint32(42, offset, true);
+    central.push(ch.buffer, name);
+    offset += 30 + name.length + bytes.length;
+    if (offset > 0xfffffff0) throw new Error('too_large');
+    if (onProgress) onProgress(i + 1, entries.length);
+  }
+  const cdSize = central.reduce((n, p) => n + p.byteLength, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, entries.length, true); end.setUint16(10, entries.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, end.buffer], { type: 'application/zip' });
+}
+// ZIP の目次を読む → { 名前: { blob(), text() } }。無圧縮のものだけ(このアプリが作った ZIP 用)
+async function readZip(file) {
+  const tailLen = Math.min(file.size, 22 + 65535);
+  const tail = new DataView(await file.slice(file.size - tailLen).arrayBuffer());
+  let p = -1;
+  for (let i = tailLen - 22; i >= 0; i--) if (tail.getUint32(i, true) === 0x06054b50) { p = i; break; }
+  if (p < 0) throw new Error('not_zip');
+  const count = tail.getUint16(p + 10, true), cdSize = tail.getUint32(p + 12, true), cdOff = tail.getUint32(p + 16, true);
+  const cd = new DataView(await file.slice(cdOff, cdOff + cdSize).arrayBuffer());
+  const dec = new TextDecoder();
+  const out = {};
+  let q = 0;
+  for (let i = 0; i < count; i++) {
+    if (cd.getUint32(q, true) !== 0x02014b50) throw new Error('bad_zip');
+    const method = cd.getUint16(q + 10, true), size = cd.getUint32(q + 20, true);
+    const nl = cd.getUint16(q + 28, true), xl = cd.getUint16(q + 30, true), cl = cd.getUint16(q + 32, true);
+    const lho = cd.getUint32(q + 42, true);
+    const name = dec.decode(new Uint8Array(cd.buffer, q + 46, nl));
+    q += 46 + nl + xl + cl;
+    if (method !== 0) continue;
+    const entry = { lho, size, start: null };
+    const start = async () => {
+      if (entry.start === null) {
+        const lh = new DataView(await file.slice(lho, lho + 30).arrayBuffer());
+        entry.start = lho + 30 + lh.getUint16(26, true) + lh.getUint16(28, true);
+      }
+      return entry.start;
+    };
+    out[name] = {
+      blob: async (type) => { const s = await start(); return new Blob([file.slice(s, s + size)], { type: type || '' }); },
+      text: async () => { const s = await start(); return file.slice(s, s + size).text(); }
+    };
+  }
+  return out;
+}
+
+async function backupNeeded() {
+  const recs = await dbAll('records');
+  if (!recs.length) return false;
+  const last = await kvGet('lastBackup');
+  const since = last ? last.at : 0;
+  const changed = recs.filter((r) => (r.updatedAt || r.createdAt || 0) > since).length;
+  if (!changed) return false;
+  if (changed >= BACKUP_REMIND_COUNT) return true;
+  const base = last ? last.at : Math.min(...recs.map((r) => r.createdAt || Date.now()));
+  return Date.now() - base >= BACKUP_REMIND_DAYS * 86400000;
+}
+async function backupBanner() {
+  if (!(await backupNeeded())) return null;
+  try { if (sessionStorage.getItem('hideBackup')) return null; } catch (e) { /* 無視 */ }
+  const box = h('div', { class: 'banner' },
+    h('button', { class: 'x', 'aria-label': '閉じる', onClick: () => { try { sessionStorage.setItem('hideBackup', '1'); } catch (e) { /* 無視 */ } box.remove(); } }, '×'),
+    h('b', null, 'バックアップをおすすめします'),
+    h('div', null, '記録はこのスマホの中だけにあります。機種変更や故障に備えて、バックアップを作って保存してください。'),
+    h('div', { style: { marginTop: '8px' } }, h('button', { class: 'btn sm pri', onClick: () => go('#backup') }, 'バックアップを作る')));
+  return box;
+}
+function fmtSize(bytes) { return bytes >= 1048576 ? '約' + Math.max(1, Math.round(bytes / 1048576)) + 'MB' : '約' + Math.max(1, Math.round(bytes / 1024)) + 'KB'; }
+
+async function buildBackup(siteIds, onProgress) {
+  const sites = (await dbAll('sites')).filter((s) => siteIds.has(s.id));
+  const siteName = Object.fromEntries(sites.map((s) => [s.id, s.name]));
+  const recs = (await dbAll('records')).map(normRec).filter((r) => siteIds.has(r.siteId));
+  const files = [], used = new Set();
+  const outRecs = recs.map((r) => {
+    const photos = r.photos.map((p, i) => {
+      let name = '写真/' + safeName(siteName[r.siteId] || '現場') + '/' + ymd(new Date(r.createdAt)) + '_' + r.id.slice(-6) + '_' + (i + 1) + '_' + (p.kind || '写真') + '.jpg';
+      if (used.has(name)) name = name.replace(/\.jpg$/, '_' + p.id.slice(-4) + '.jpg');
+      used.add(name);
+      files.push({ name, data: p.blob, mtime: p.shotAt });
+      return { id: p.id, kind: p.kind, shotAt: p.shotAt, fileMtime: p.fileMtime || null, src: p.src || null, memo: p.memo || '', file: name, type: p.blob && p.blob.type || 'image/jpeg' };
+    });
+    const { photo, ...rest } = r;   // 旧形式の写真(normRec で photos に読み替え済み)は入れない
+    return Object.assign({}, rest, { photos });
+  });
+  const data = {
+    app: BACKUP_APP, format: BACKUP_FORMAT, version: CONFIG.VERSION, createdAt: Date.now(),
+    author: (await kvGet('author')) || '', company: (await kvGet('company')) || '',
+    sites, records: outRecs
+  };
+  const json = new TextEncoder().encode(JSON.stringify(data));
+  const zip = await makeZip([{ name: 'data.json', data: json }, ...files], onProgress);
+  return { zip, siteCount: sites.length, recCount: recs.length, photoCount: files.length };
+}
+
+// mode: 'merge'(今のデータは残し、足りないもの・新しいものだけ入れる) | 'replace'(全部入れ替える)
+async function restoreBackup(file, mode, onProgress) {
+  const zip = await readZip(file);
+  if (!zip['data.json']) throw new Error('no_data');
+  const data = JSON.parse(await zip['data.json'].text());
+  if (!data || data.app !== BACKUP_APP || !Array.isArray(data.sites) || !Array.isArray(data.records)) throw new Error('not_backup');
+  if (data.format > BACKUP_FORMAT) throw new Error('newer_format');
+  if (mode === 'replace') {
+    const d = await db();
+    await new Promise((res, rej) => {
+      const t = d.transaction(['sites', 'records'], 'readwrite');
+      t.objectStore('sites').clear(); t.objectStore('records').clear();
+      t.oncomplete = () => res(); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
+    });
+  }
+  const siteIds = new Set();
+  let addedSites = 0, addedRecs = 0, updatedRecs = 0, skipped = 0;
+  for (const s of data.sites) {
+    if (!s || !s.id || !s.name) continue;
+    siteIds.add(s.id);
+    if (!(await dbGet('sites', s.id))) { await dbPut('sites', { id: s.id, name: String(s.name), createdAt: s.createdAt || Date.now() }); addedSites++; }
+  }
+  for (let i = 0; i < data.records.length; i++) {
+    const r = data.records[i];
+    if (onProgress) onProgress(i + 1, data.records.length);
+    if (!r || !r.id || !siteIds.has(r.siteId)) { skipped++; continue; }
+    const cur = await dbGet('records', r.id);
+    if (cur && (normRec(cur).updatedAt || 0) >= (r.updatedAt || 0)) { skipped++; continue; }
+    const photos = [];
+    for (const p of r.photos || []) {
+      const ent = p && zip[p.file];
+      if (!ent) continue;
+      photos.push({ id: p.id || uid(), blob: await ent.blob(p.type || 'image/jpeg'), kind: p.kind || KINDS[0], shotAt: p.shotAt || r.createdAt,
+        fileMtime: p.fileMtime || null, src: p.src || null, memo: p.memo || '' });
+    }
+    await dbPut('records', {
+      id: r.id, siteId: r.siteId, createdAt: r.createdAt || Date.now(), updatedAt: r.updatedAt || r.createdAt || Date.now(),
+      location: r.location || '', content: r.content || '', work: r.work || '', people: r.people == null ? '' : r.people,
+      photos, draft: !!r.draft
+    });
+    if (cur) updatedRecs++; else addedRecs++;
+  }
+  if (mode === 'replace' || !(await kvGet('author'))) {
+    if (data.author) await kvSet('author', data.author);
+    if (data.company) await kvSet('company', data.company);
+  }
+  return { addedSites, addedRecs, updatedRecs, skipped, createdAt: data.createdAt };
+}
+
+async function viewBackup() {
+  const sites = await dbAll('sites');
+  const recs = (await dbAll('records')).map(normRec);
+  const cnt = {}, pics = {};
+  recs.forEach((r) => { cnt[r.siteId] = (cnt[r.siteId] || 0) + 1; pics[r.siteId] = (pics[r.siteId] || 0) + r.photos.length; });
+  const last = await kvGet('lastBackup');
+  const checks = sites.map((s) => {
+    const cb = h('input', { type: 'checkbox', checked: true, value: s.id, style: { width: '22px', height: '22px', flex: 'none' } });
+    return { cb, row: h('label', { style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 0' } }, cb,
+      h('span', null, s.name, h('span', { class: 'mute' }, '　工事' + (cnt[s.id] || 0) + '件・写真' + (pics[s.id] || 0) + '枚'))) };
+  });
+  const status = h('p', { class: 'mute', style: { margin: '8px 0 0' } }, '');
+  const makeBtn = h('button', { class: 'btn pri' }, 'バックアップを作る');
+  const shareBtn = h('button', { class: 'btn pri', style: { display: 'none' } }, '保存・共有する');
+  const dlBtn = h('button', { class: 'btn', style: { display: 'none', marginTop: '10px' } }, '共有できないときは、ここから保存');
+  let zipFile = null;   // iOS は操作から時間が空くと共有を拒否するため、先に作っておいて2回目の操作で共有する
+  const markDone = async () => { await kvSet('lastBackup', { at: Date.now() }); };
+  const download = async (file) => {
+    const u = URL.createObjectURL(file);
+    const a = h('a', { href: u, download: file.name }); document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 60000);
+    await markDone();
+    toast('バックアップを保存しました');
+  };
+  makeBtn.addEventListener('click', async () => {
+    const ids = new Set(checks.filter((c) => c.cb.checked).map((c) => c.cb.value));
+    if (!ids.size) return toast('現場を選んでください');
+    makeBtn.disabled = true; zipFile = null; shareBtn.style.display = 'none'; dlBtn.style.display = 'none';
+    status.textContent = 'バックアップを作っています…';
+    try {
+      const r = await buildBackup(ids, (i, n) => { status.textContent = 'バックアップを作っています… ' + i + ' / ' + n; });
+      zipFile = new File([r.zip], '追加変更記録_バックアップ_' + ymd(new Date()) + '.zip', { type: 'application/zip' });
+      status.textContent = '現場' + r.siteCount + '件・工事' + r.recCount + '件・写真' + r.photoCount + '枚（' + fmtSize(zipFile.size) + '）。下のボタンで保存してください。';
+      shareBtn.style.display = ''; dlBtn.style.display = '';
+    } catch (e) {
+      console.error(e);
+      status.textContent = e && e.message === 'too_large' ? '大きすぎて作れませんでした。現場を分けて作ってください。' : 'バックアップを作れませんでした。もう一度お試しください。';
+    }
+    makeBtn.disabled = false;
+  });
+  shareBtn.addEventListener('click', async () => {
+    if (!zipFile) return;
+    if (navigator.canShare && navigator.canShare({ files: [zipFile] })) {
+      try { await navigator.share({ files: [zipFile], title: zipFile.name }); await markDone(); toast('バックアップを渡しました'); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; /* 共有できないときは保存に切り替える */ }
+    }
+    download(zipFile);
+  });
+  dlBtn.addEventListener('click', () => { if (zipFile) download(zipFile); });
+
+  const fileIn = h('input', { type: 'file', accept: '.zip,application/zip', style: { display: 'none' } });
+  const mergeBtn = h('button', { class: 'btn', onClick: () => { fileIn.dataset.mode = 'merge'; fileIn.click(); } }, '戻す（今の記録は残す）');
+  const replaceBtn = h('button', { class: 'btn danger', style: { marginTop: '10px' }, onClick: () => {
+    if (!confirm('今このスマホにある記録と写真をすべて消して、バックアップの内容に入れ替えます。よろしいですか？')) return;
+    if (!confirm('消した記録は元に戻せません。本当に入れ替えますか？')) return;
+    fileIn.dataset.mode = 'replace'; fileIn.click();
+  } }, '入れ替える（今の記録は消える）');
+  const rstatus = h('p', { class: 'mute', style: { margin: '8px 0 0' } }, '');
+  fileIn.addEventListener('change', async () => {
+    const f = fileIn.files && fileIn.files[0];
+    fileIn.value = '';
+    if (!f) return;
+    mergeBtn.disabled = replaceBtn.disabled = true;
+    rstatus.textContent = '読み込んでいます…';
+    try {
+      const r = await restoreBackup(f, fileIn.dataset.mode === 'replace' ? 'replace' : 'merge', (i, n) => { rstatus.textContent = '読み込んでいます… ' + i + ' / ' + n; });
+      rstatus.textContent = '';
+      toast('戻しました（工事 追加' + r.addedRecs + '件・更新' + r.updatedRecs + '件）');
+      return go('#sites');
+    } catch (e) {
+      console.error(e);
+      const m = e && e.message;
+      rstatus.textContent = m === 'not_zip' || m === 'bad_zip' || m === 'no_data' || m === 'not_backup' ? 'このアプリのバックアップファイルではないようです。'
+        : m === 'newer_format' ? '新しい版のアプリで作られたバックアップです。アプリを最新にしてからお試しください。'
+        : '戻せませんでした。もう一度お試しください。';
+    }
+    mergeBtn.disabled = replaceBtn.disabled = false;
+  });
+
+  mount(
+    topBar('バックアップ', { back: () => go('#settings') }),
+    h('main', null,
+      h('div', { class: 'card' },
+        h('h2', null, 'バックアップを作る'),
+        h('p', { style: { margin: '0 0 6px' } }, '記録と写真を1つのファイルにまとめます。「ファイル」アプリ、Googleドライブ、パソコンなど、このスマホ以外の場所に保存してください。'),
+        h('p', { class: 'mute', style: { margin: '0 0 8px' } }, '最後のバックアップ: ' + (last ? fmtDate(last.at) : 'まだありません') + '。ファイルはサーバーには送られません。'),
+        sites.length ? h('div', null, checks.map((c) => c.row)) : h('p', { class: 'mute' }, 'まだ記録がありません。'),
+        h('div', { style: { height: '8px' } }),
+        sites.length ? makeBtn : null, status,
+        h('div', { style: { height: '8px' } }), shareBtn, dlBtn),
+      h('div', { class: 'card' },
+        h('h2', null, 'バックアップから戻す'),
+        h('p', { style: { margin: '0 0 8px' } }, '保存しておいたバックアップファイル（.zip）を選びます。同じ工事がスマホにもあるときは、新しく直した方を残します。'),
+        mergeBtn, replaceBtn, rstatus, fileIn)));
 }
 
 /* ============================================================
