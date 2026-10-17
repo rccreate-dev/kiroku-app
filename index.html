@@ -95,7 +95,7 @@ h2{font-size:18px;margin:4px 0 8px}
 const CONFIG = {
   APPROVAL_URL: 'https://script.google.com/macros/s/AKfycbyh77k-hWsUqDc3fJWPlr7BhG6hhX4ReNszEiQrD49UlXyvllTwSGaEcdcS59ofb-ME/exec',
   MAX_PAGES_PER_PDF: 10,   // 1回のPDFに入れられる用紙の枚数(スマホのメモリ対策。超えるときは分けて出力)
-  VERSION: '1.4.0'
+  VERSION: '1.4.1'
 };
 
 const KINDS = ['着手前', '施工中', '完了後'];
@@ -280,7 +280,7 @@ function gateView(state) {
   if (state === 'rejected') {
     return mount(topBar('利用できません'), h('main', null,
       h('div', { class: 'card' }, h('p', null, '利用が承認されませんでした。管理者にお問い合わせください。')),
-      h('button', { class: 'btn', onClick: async () => { await kvDel('approval'); route(); } }, '申請をやり直す')));
+      h('button', { class: 'btn', onClick: async () => { await kvDel('approval'); await kvDel('deviceId'); route(); } }, '申請をやり直す')));
   }
   return viewPending();
 }

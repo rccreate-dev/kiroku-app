@@ -51,7 +51,7 @@ function sheet_() {
   var sh = ss.getSheetByName(SHEET_NAME);
   if (!sh) {
     sh = ss.insertSheet(SHEET_NAME);
-    sh.appendRow(['ID', '申請日時', '氏名', '会社名', '状態', '決定日時']);
+    sh.appendRow(['ID', '申請日時', '氏名', '会社名', '状態', '決定日時', '備考']);
     sh.setFrozenRows(1);
     sh.getRange('E2:E1000').setDataValidation(
       SpreadsheetApp.newDataValidation().requireValueInList([STATUS_PENDING, STATUS_OK, STATUS_NG], true).build()
@@ -123,12 +123,44 @@ function apply_(p) {
     var sh = sheet_();
     var row = findRow_(sh, p.id);
     if (row) return { ok: true, status: toCode_(sh.getRange(row, 5).getValue()) };
-    sh.appendRow([p.id, new Date(), name, company, STATUS_PENDING, '']);
+    var same = sameName_(sh, name);
+    sh.appendRow([p.id, new Date(), name, company, STATUS_PENDING, '', same.note]);
+    if (same.count) {
+      var r = sh.getLastRow();
+      sh.getRange(r, 1, 1, 7).setBackground('#fef08a'); // 同じ氏名の申請が既にある行は黄色
+      if (!sh.getRange(1, 7).getValue()) sh.getRange(1, 7).setValue('備考');
+    }
   } finally {
     lock.releaseLock();
   }
-  notify_(p.id, name, company);
+  notify_(p.id, name, company, same.note);
   return { ok: true, status: 'pending' };
+}
+
+// 氏名の空白(全角・半角)を除いて比べる
+function normName_(s) {
+  return String(s || '').replace(/[\s\u3000]+/g, '').toLowerCase();
+}
+
+// 同じ氏名の既存の申請を数える。ホーム画面に追加したアプリは保存場所が別になり、
+// 同じ人が別の端末番号で申請し直すことがあるため、管理者が見分けられるようにする
+function sameName_(sh, name) {
+  var last = sh.getLastRow();
+  var res = { count: 0, ok: 0, pending: 0, ng: 0, note: '' };
+  if (last < 2) return res;
+  var key = normName_(name);
+  var vals = sh.getRange(2, 3, last - 1, 3).getValues(); // 氏名, 会社名, 状態
+  for (var i = 0; i < vals.length; i++) {
+    if (normName_(vals[i][0]) !== key) continue;
+    res.count++;
+    if (vals[i][2] === STATUS_OK) res.ok++;
+    else if (vals[i][2] === STATUS_NG) res.ng++;
+    else res.pending++;
+  }
+  if (res.count) {
+    res.note = '同じ氏名の申請が既に' + res.count + '件（承認' + res.ok + '・申請中' + res.pending + '・却下' + res.ng + '）。同じ方の再申請の可能性';
+  }
+  return res;
 }
 
 function status_(p) {
@@ -156,7 +188,7 @@ function sign_(id, decision) {
   return bytes.map(function (b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
 }
 
-function notify_(id, name, company) {
+function notify_(id, name, company, note) {
   // 申請が大量に来てもメールが止まらないよう、6時間あたり20通までにする
   var cache = CacheService.getScriptCache();
   var n = Number(cache.get('mailN') || 0);
@@ -169,12 +201,14 @@ function notify_(id, name, company) {
   var html =
     '<p>追加変更記録アプリの利用申請が届きました。</p>' +
     '<p>氏名: <b>' + esc_(name) + '</b><br>会社名: <b>' + esc_(company) + '</b></p>' +
+    (note ? '<p style="background:#fef9c3;border:1px solid #eab308;padding:10px;border-radius:8px"><b>ご確認ください:</b> ' + esc_(note) +
+      '。ホーム画面に追加したアプリから申請し直した場合などに、同じ方でも別の申請として届きます。同じ方なら「承認する」を押してください。</p>' : '') +
     '<p><a href="' + ok + '" style="display:inline-block;padding:12px 20px;background:#166534;color:#fff;text-decoration:none;border-radius:8px">承認する</a>　' +
     '<a href="' + ng + '" style="display:inline-block;padding:12px 20px;background:#b91c1c;color:#fff;text-decoration:none;border-radius:8px">却下する</a></p>' +
     '<p style="color:#666">心当たりのない申請は「却下する」を押してください。後からスプレッドシートの「状態」欄でも変更できます。</p>';
   MailApp.sendEmail({
     to: Session.getEffectiveUser().getEmail(),
-    subject: '【追加変更記録】利用申請: ' + name + '（' + company + '）',
+    subject: '【追加変更記録】利用申請' + (note ? '（再申請の可能性）' : '') + ': ' + name + '（' + company + '）',
     htmlBody: html
   });
 }
