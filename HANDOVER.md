@@ -11,6 +11,12 @@
   - /areas/change-work-proof-app.md（アプリ本体の仕様・決定事項）
   - /areas/app-sales-business.md（販売の検討プロジェクト）
 
+## 0-2. Apps Script の取り違え防止（2026-10-22 追加）
+- 同じアカウントに「無題のプロジェクト」が2つ以上あり、他アプリ（日繰表など）の Apps Script と取り違えるおそれがあります。
+- 編集してよいのは、プロジェクト ID `19ILqUaBgwxjDlUlnb8uKr4pD5TI7WTB0ZMtWuB6C4MKJAJ_3-TBeJBQI` だけです。詳しい手順は `CLAUDE.md` を参照してください。
+- 2026-10-22 時点の確認: このプロジェクトは、10/17に公開したバージョン3のまま（コード・実際の応答とも異常なし）。日繰表のプロジェクト（10/21更新）に、追加変更記録アプリのコードは混ざっていません。
+- バージョン: 現在は 1.4.1（sw.js の CACHE は kiroku-v9）。承認サーバーはバージョン3（同じ氏名の再申請を表示）。
+
 ## 1. アプリの目的
 - 職長が、追加変更工事の「証明資料」をスマホで作るためのアプリ（PWA）。
 - 1つの追加変更工事を1件として登録。写真は何枚でもよく、写真ごとに「着手前／施工中／完了後」を付ける。
@@ -24,7 +30,7 @@
 ## 2. 現在の公開状態（2026-10-15 時点）
 - 公開アドレス（利用者に配るもの）: https://kiroku.rccreate.net/
 - 旧アドレス https://rccreate-dev.github.io/kiroku-app/ は新アドレスに自動転送される。
-- バージョン 1.4.0。Service Worker のキャッシュ名 kiroku-v8。
+- バージョン 1.4.1。Service Worker のキャッシュ名 kiroku-v9。
 - 最新コミット: c43e655（写真ライブラリから選ぶ機能）以降。
 - リポジトリ: https://github.com/rccreate-dev/kiroku-app（公開。ブランチは main のみ）。
 - GitHub Pages: main ブランチ・/(root)・legacy ビルド。Custom domain は kiroku.rccreate.net、Enforce HTTPS 有効。
